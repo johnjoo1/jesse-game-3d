@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7cc8ff">
+<title>Paintball Wars 3D</title>
+<style>
+  [hidden] { display: none !important; } /* so display: flex rules never un-hide things */
+  :root {
+    --ink: #1c2230; --card: #ffffff; --muted: #5b6475; --pink: #ff3d7f;
+    --pill: rgba(16, 22, 36, 0.62); --pill-ink: #ffffff;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #7cc8ff; color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  canvas#view { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- start screen, pause, errors ---------- */
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(18, 30, 52, 0.35); overflow-y: auto; padding: 16px; box-sizing: border-box; z-index: 20; }
+  .card { background: var(--card); border-radius: 22px; padding: 26px 28px; width: min(400px, 100%);
+    box-sizing: border-box; text-align: center; box-shadow: 0 14px 50px rgba(0, 0, 0, .35); margin: auto; }
+  .card h1 { margin: 0 0 4px; font-size: 34px; line-height: 1.05; letter-spacing: -0.5px; }
+  .card h1 span { color: var(--pink); }
+  .card .sub { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
+  .card label { display: block; text-align: left; font-weight: 800; font-size: 14px; margin: 0 0 6px; color: var(--muted); }
+  #name { width: 100%; box-sizing: border-box; font-size: 20px; font-weight: 700; padding: 12px 14px; margin-bottom: 16px;
+    border: 3px solid #d5dbe6; border-radius: 14px; -webkit-user-select: text; user-select: text; outline: none; }
+  #name:focus { border-color: #7cc8ff; }
+  #colors { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+  #colors button { width: 40px; height: 40px; border-radius: 50%; border: 4px solid #fff; cursor: pointer; padding: 0;
+    box-shadow: 0 0 0 2px #d5dbe6; }
+  #colors button.sel { box-shadow: 0 0 0 4px var(--ink); transform: scale(1.08); }
+  .big { width: 100%; font-size: 24px; font-weight: 900; padding: 16px; border: 0; border-radius: 16px;
+    background: var(--pink); color: #fff; cursor: pointer; box-shadow: 0 5px 0 #c21f5a; }
+  .big:active { transform: translateY(3px); box-shadow: 0 2px 0 #c21f5a; }
+  .big.alt { background: #e9eef6; color: var(--ink); box-shadow: 0 5px 0 #c3ccda; margin-top: 12px; font-size: 19px; padding: 12px; }
+  .keys { margin-top: 16px; font-size: 14px; color: var(--muted); line-height: 1.7; }
+  .keys b { display: inline-block; min-width: 18px; padding: 0 6px; border: 2px solid #c9d1de; border-bottom-width: 3px;
+    border-radius: 6px; color: var(--ink); font-size: 12px; line-height: 18px; }
+  .touch-only { display: none; }
+  body.touch .touch-only { display: block; }
+  body.touch .desk-only { display: none !important; }
+  #rotate { margin-top: 12px; font-size: 14px; font-weight: 800; color: #b8336a; }
+  @media (orientation: landscape) { #rotate { display: none !important; } }
+  @media (max-height: 520px) {
+    .card { padding: 16px 22px; }
+    .card h1 { font-size: 26px; }
+    .card .sub { display: none; }
+    #name { font-size: 17px; padding: 8px 12px; margin-bottom: 10px; }
+    #colors { margin-bottom: 12px; gap: 8px; }
+    #colors button { width: 32px; height: 32px; }
+    .big { font-size: 20px; padding: 11px; }
+    .keys { margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: var(--pill-ink);
+    text-shadow: 0 2px 3px rgba(0, 0, 0, .45); }
+  .pill { background: var(--pill); border-radius: 14px; padding: 8px 12px; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+  #cross::before, #cross::after { content: ""; position: absolute; background: #fff; border-radius: 2px;
+    box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .55); }
+  #cross::before { left: 13.5px; top: 4px; width: 3px; height: 22px; }
+  #cross::after { top: 13.5px; left: 4px; height: 3px; width: 22px; }
+  #hitmark { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; opacity: 0; }
+  #hitmark i { position: absolute; width: 4px; height: 13px; background: #fff; left: 20px; top: 0; border-radius: 2px;
+    transform-origin: 2px 22px; box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .5); }
+  #hitmark i:nth-child(1) { transform: rotate(45deg); }
+  #hitmark i:nth-child(2) { transform: rotate(135deg); }
+  #hitmark i:nth-child(3) { transform: rotate(225deg); }
+  #hitmark i:nth-child(4) { transform: rotate(315deg); }
+  #hitmark.kill i { background: var(--kc, #ff3d7f); height: 16px; }
+
+  #splat { position: absolute; left: 0; right: 0; top: 22%; text-align: center; opacity: 0; }
+  #splat .w { font-size: clamp(54px, 11vw, 110px); font-weight: 900; letter-spacing: 2px; display: inline-block;
+    transform: rotate(-6deg); color: var(--kc, #ff3d7f);
+    text-shadow: 0 0 0 #000, 4px 4px 0 #1c2230, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 6px 7px 0 rgba(0, 0, 0, .25); }
+  #splat .who { font-size: clamp(18px, 3vw, 26px); font-weight: 800; margin-top: 4px; }
+  #splat.show { animation: pop 1.4s ease-out forwards; }
+  @keyframes pop {
+    0% { opacity: 0; transform: scale(.4); } 12% { opacity: 1; transform: scale(1.15); } 22% { transform: scale(1); }
+    75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); }
+  }
+
+  #health { position: absolute; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+  #hearts { font-size: 34px; letter-spacing: 2px; line-height: 1; }
+  #hearts span { color: #ff3d7f; }
+  #hearts span.off { color: rgba(255, 255, 255, .28); }
+  #stam { width: 170px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .25); overflow: hidden; }
+  #stam i { display: block; height: 100%; width: 100%; background: #ffd23d; }
+  #shieldTag { font-size: 15px; font-weight: 800; color: #bff6ff; }
+  #hiddenTag { font-size: 15px; font-weight: 800; color: #b9ff9c; }
+
+  #ammo { position: absolute; right: 16px; bottom: 16px; text-align: right; }
+  #ammo .n { font-size: 48px; font-weight: 900; line-height: 1; }
+  #ammo .n small { font-size: 22px; opacity: .75; }
+  #balls { display: flex; gap: 3px; justify-content: flex-end; margin-top: 6px; flex-wrap: wrap; max-width: 220px; margin-left: auto; }
+  #balls i { width: 12px; height: 12px; border-radius: 50%; background: var(--me, #ff3d7f); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .4); }
+  #balls i.off { background: rgba(255, 255, 255, .22); }
+  #reload { margin-top: 6px; font-size: 16px; font-weight: 800; }
+  #reload .bar { height: 8px; width: 150px; margin: 4px 0 0 auto; border-radius: 4px; background: rgba(255, 255, 255, .25); overflow: hidden; }
+  #reload .bar i { display: block; height: 100%; width: 0; background: #fff; }
+
+  #board { position: absolute; left: 16px; top: 16px; font-size: 15px; font-weight: 700; min-width: 170px; }
+  #board .h { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; opacity: .75; margin-bottom: 3px; }
+  #board .r { display: flex; gap: 8px; align-items: center; line-height: 1.5; }
+  #board .r .d { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  #board .r .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+  #board .r.me { color: #ffe680; }
+
+  #mapWrap { position: absolute; right: 16px; top: 16px; width: 150px; height: 150px; border-radius: 50%; overflow: hidden;
+    background: rgba(16, 22, 36, .55); box-shadow: 0 0 0 3px rgba(255, 255, 255, .7); }
+  #map { width: 100%; height: 100%; display: block; }
+  #feed { position: absolute; right: 16px; top: 180px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
+    font-size: 15px; font-weight: 800; }
+  #feed div { background: var(--pill); border-radius: 10px; padding: 4px 10px; transition: opacity .5s; }
+
+  #dead { position: absolute; left: 0; right: 0; top: 30%; text-align: center; }
+  #dead .t { font-size: clamp(30px, 6vw, 52px); font-weight: 900; }
+  #dead .c { font-size: clamp(20px, 3.5vw, 28px); font-weight: 800; margin-top: 8px; }
+
+  #hurt { position: fixed; inset: 0; pointer-events: none; z-index: 9; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, var(--hc, #ff3d7f) 140%); }
+  #splats { position: fixed; inset: 0; pointer-events: none; z-index: 9; overflow: hidden; }
+  #splats div { position: absolute; width: 34vmin; height: 34vmin; margin: -17vmin 0 0 -17vmin; animation: drip 1.6s ease-in forwards;
+    -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+  @keyframes drip { 0% { opacity: .9; transform: scale(.6); } 10% { transform: scale(1); } 100% { opacity: 0; transform: translateY(6vmin); } }
+  #leafy { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity .3s;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(40, 140, 50, .55) 120%); }
+  #shieldFx { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity .3s;
+    box-shadow: inset 0 0 80px 10px rgba(150, 235, 255, .7); }
+
+  #pauseBtn { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); pointer-events: auto; width: 46px; height: 46px;
+    border-radius: 50%; border: 0; background: var(--pill); color: #fff; font-size: 20px; font-weight: 900; }
+
+  /* ---------- touch controls ---------- */
+  #touch { position: fixed; inset: 0; z-index: 5; touch-action: none; }
+  #stick { position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%;
+    background: rgba(255, 255, 255, .18); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .5); pointer-events: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
+    background: rgba(255, 255, 255, .75); box-shadow: 0 3px 8px rgba(0, 0, 0, .3); }
+  #stickHint { position: absolute; left: 7%; bottom: 14%; width: 110px; height: 110px; border-radius: 50%;
+    border: 3px dashed rgba(255, 255, 255, .45); pointer-events: none; }
+  .tb { position: absolute; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center;
+    font-weight: 900; color: #fff; background: rgba(16, 22, 36, .5); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .6);
+    text-shadow: 0 2px 2px rgba(0, 0, 0, .4); touch-action: none; }
+  .tb.on { background: rgba(255, 255, 255, .45); }
+  #tFire { right: 4%; bottom: 12%; width: 104px; height: 104px; font-size: 20px;
+    background: color-mix(in srgb, var(--me, #ff3d7f) 70%, transparent); }
+  #tJump { right: calc(4% + 116px); bottom: 7%; width: 70px; height: 70px; font-size: 15px; }
+  #tReload { right: calc(4% + 14px); bottom: calc(12% + 118px); width: 64px; height: 64px; font-size: 26px; }
+
+  /* touch: hearts and ammo side by side at the bottom middle, between the thumbs */
+  body.touch #health { left: auto; right: calc(50% + 4px); bottom: 10px; align-items: center; padding: 6px 10px; }
+  body.touch #hearts { font-size: 24px; }
+  body.touch #stam { width: 110px; height: 6px; }
+  body.touch #ammo { right: auto; left: calc(50% + 4px); bottom: 10px; text-align: center; padding: 6px 12px; }
+  body.touch #ammo .n { font-size: 30px; }
+  body.touch #ammo .n small { font-size: 16px; }
+  body.touch #balls, body.touch #reload .bar { display: none; }
+  body.touch #reload { font-size: 14px; margin-top: 2px; }
+  body.touch #board { font-size: 13px; min-width: 130px; padding: 6px 10px; }
+  body.touch #mapWrap { width: 112px; height: 112px; }
+  body.touch #feed { top: 136px; font-size: 13px; }
+  @media (max-height: 520px) {
+    #mapWrap { width: 110px; height: 110px; }
+    #feed { top: 136px; }
+    body.touch #mapWrap { width: 92px; height: 92px; }
+    body.touch #feed { top: 112px; font-size: 12px; }
+    body.touch #hearts { font-size: 22px; }
+    #tFire { width: 90px; height: 90px; }
+    #tJump { right: calc(4% + 100px); width: 62px; height: 62px; }
+    #tReload { bottom: calc(12% + 100px); width: 56px; height: 56px; }
+  }
+  @media (orientation: portrait) { /* narrow screens: stack the buttons up the right edge */
+    #tFire { bottom: calc(10% + 60px); }
+    #tJump { right: calc(4% + 17px); bottom: calc(10% + 176px); }
+    #tReload { right: calc(4% + 96px); bottom: calc(10% + 186px); }
+  }
+  @media (max-width: 520px) {
+    #board .r .nm { max-width: 80px; }
+    body.touch #board { min-width: 0; }
+  }
+  #msg { padding: 24px; max-width: 420px; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="touch" hidden>
+  <div id="stickHint"></div>
+  <div id="stick" hidden><div id="knob"></div></div>
+  <button class="tb" id="tReload" data-t="reload" aria-label="Reload">⟳</button>
+  <button class="tb" id="tJump" data-t="jump">JUMP</button>
+  <button class="tb" id="tFire" data-t="fire">FIRE</button>
+</div>
+
+<div id="hud" hidden>
+  <div id="cross"></div>
+  <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+  <div id="splat"><div class="w">SPLAT!</div><div class="who"></div></div>
+  <div id="board" class="pill"></div>
+  <div id="mapWrap"><canvas id="map" width="300" height="300"></canvas></div>
+  <div id="feed"></div>
+  <div id="health" class="pill">
+    <div id="hearts"></div>
+    <div id="stam"><i></i></div>
+    <div id="shieldTag" hidden>🛡 Spawn shield</div>
+    <div id="hiddenTag" hidden>🌿 Hidden</div>
+  </div>
+  <div id="ammo" class="pill">
+    <div class="n"><span id="ammoN">12</span><small> / <span id="ammoM">12</span></small></div>
+    <div id="balls"></div>
+    <div id="reload" hidden>Reloading…<div class="bar"><i></i></div></div>
+  </div>
+  <div id="dead" hidden><div class="t pill" style="display:inline-block;padding:12px 26px"></div><div class="c"></div></div>
+  <button id="pauseBtn" class="touch-only" aria-label="Pause">II</button>
+</div>
+<div id="hurt"></div>
+<div id="splats"></div>
+<div id="leafy"></div>
+<div id="shieldFx"></div>
+
+<div id="menu" class="screen" hidden>
+  <div class="card">
+    <h1>Paintball <span>Wars</span> 3D</h1>
+    <p class="sub">Splat the bots. Hide in the bushes. Climb the towers!</p>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Type your name">
+    <label>Your color</label>
+    <div id="colors"></div>
+    <button id="play" class="big">Play!</button>
+    <div class="keys desk-only">
+      <b>W</b><b>A</b><b>S</b><b>D</b> move · mouse looks · click shoots<br>
+      <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload · <b>Esc</b> pause
+    </div>
+    <div class="keys touch-only">
+      Left thumb moves (push all the way to run)<br>
+      Drag on the right to look · hold <b>FIRE</b> to shoot
+    </div>
+    <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
+  </div>
+</div>
+
+<div id="pause" class="screen" hidden>
+  <div class="card">
+    <h1>Paused</h1>
+    <p class="sub desk-only">Click Keep playing, then move the mouse to look around.</p>
+    <button id="resume" class="big">Keep playing</button>
+    <button id="quit" class="big alt">Back to start</button>
+  </div>
+</div>
+
+<div id="msg" class="screen" hidden><div class="card"><h1>Oops!</h1><p class="sub" id="msgText"></p></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
