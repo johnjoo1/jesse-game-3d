@@ -93,6 +93,28 @@
   #stam i { display: block; height: 100%; width: 100%; background: #ffd23d; }
   #shieldTag { font-size: 15px; font-weight: 800; color: #bff6ff; }
   #hiddenTag { font-size: 15px; font-weight: 800; color: #b9ff9c; }
+  #buffs { display: flex; gap: 6px; flex-wrap: wrap; }
+  #buffs span { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 900; color: #1c2230; text-shadow: none; box-shadow: 0 0 0 2.5px #fff; }
+
+  /* carried defenses: 3 slots above the ammo (touch: tap one to place it) */
+  #slots { position: absolute; right: 16px; bottom: 124px; display: flex; gap: 8px; }
+  .slot { position: relative; width: 66px; height: 66px; border-radius: 16px; border: 3px solid var(--ic, rgba(255,255,255,.4));
+    background: var(--pill); color: #fff; padding: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .slot span { font-size: 30px; line-height: 1; width: 42px; height: 42px; border-radius: 50%; background: var(--ic);
+    color: #1c2230; display: flex; align-items: center; justify-content: center; font-weight: 900; text-shadow: none; }
+  .slot small { position: absolute; left: 6px; top: 3px; font-size: 13px; font-weight: 900; }
+  .slot em { position: absolute; left: -6px; right: -6px; bottom: -19px; font-size: 11px; font-style: normal; font-weight: 800;
+    text-align: center; white-space: nowrap; overflow: hidden; }
+  .slot.empty { border-style: dashed; opacity: .55; }
+  .slot.sel { box-shadow: 0 0 0 3px #fff, 0 0 18px rgba(255, 255, 255, .7); }
+
+  #toast { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%); width: max-content; max-width: min(560px, 88vw);
+    text-align: center; background: var(--pill); border-radius: 16px; padding: 10px 18px; font-size: 18px; font-weight: 700; opacity: 0;
+    box-shadow: inset 0 0 0 3px var(--tc, #fff); box-sizing: border-box; }
+  #toast b { color: var(--tc, #fff); font-weight: 900; }
+  #toast.show { animation: toast 3.2s ease-out forwards; }
+  @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 12px); } 8% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; } }
 
   #ammo { position: absolute; right: 16px; bottom: 16px; text-align: right; }
   #ammo .n { font-size: 48px; font-weight: 900; line-height: 1; }
@@ -161,11 +183,24 @@
   body.touch #ammo .n { font-size: 30px; }
   body.touch #ammo .n small { font-size: 16px; }
   body.touch #balls, body.touch #reload .bar { display: none; }
+  body.touch #slots { right: auto; left: 50%; transform: translateX(-50%); bottom: 70px; }
+  body.touch .slot { pointer-events: auto; width: 60px; height: 60px; }
+  body.touch .slot em { display: none; }
+  body.touch #buffs span { width: 24px; height: 24px; font-size: 14px; }
+  /* touch: boosts sit beside the hearts and the stamina bar along the bottom edge, so the box stays short */
+  body.touch #health { flex-direction: row; flex-wrap: wrap; justify-content: center; max-width: 46vw; padding-bottom: 12px; }
+  body.touch #stam { position: absolute; left: 12px; right: 12px; bottom: 4px; width: auto; height: 5px; }
+  body.touch #toast { bottom: auto; top: 22%; font-size: 15px; }
   body.touch #reload { font-size: 14px; margin-top: 2px; }
   body.touch #board { font-size: 13px; min-width: 130px; padding: 6px 10px; }
   body.touch #mapWrap { width: 112px; height: 112px; }
   body.touch #feed { top: 136px; font-size: 13px; }
   @media (max-height: 520px) {
+    #slots { bottom: 112px; }
+    .slot { width: 56px; height: 56px; }
+    body.touch #slots { bottom: 56px; }
+    body.touch .slot { width: 52px; height: 52px; }
+    .slot span { width: 36px; height: 36px; font-size: 24px; }
     #mapWrap { width: 110px; height: 110px; }
     #feed { top: 136px; }
     body.touch #mapWrap { width: 92px; height: 92px; }
@@ -175,10 +210,13 @@
     #tJump { right: calc(4% + 100px); width: 62px; height: 62px; }
     #tReload { bottom: calc(12% + 100px); width: 56px; height: 56px; }
   }
+  @media (orientation: portrait) {
+    body.touch #slots { left: auto; right: 4%; transform: none; bottom: calc(12% + 312px); }
+  }
   @media (orientation: portrait) { /* narrow screens: stack the buttons up the right edge */
-    #tFire { bottom: calc(10% + 60px); }
-    #tJump { right: calc(4% + 17px); bottom: calc(10% + 176px); }
-    #tReload { right: calc(4% + 96px); bottom: calc(10% + 186px); }
+    #tFire { bottom: calc(12% + 110px); }
+    #tJump { right: calc(4% + 17px); bottom: calc(12% + 226px); }
+    #tReload { right: calc(4% + 96px); bottom: calc(12% + 236px); }
   }
   @media (max-width: 520px) {
     #board .r .nm { max-width: 80px; }
@@ -210,7 +248,10 @@
     <div id="stam"><i></i></div>
     <div id="shieldTag" hidden>🛡 Spawn shield</div>
     <div id="hiddenTag" hidden>🌿 Hidden</div>
+    <div id="buffs" hidden></div>
   </div>
+  <div id="slots" hidden></div>
+  <div id="toast"></div>
   <div id="ammo" class="pill">
     <div class="n"><span id="ammoN">12</span><small> / <span id="ammoM">12</span></small></div>
     <div id="balls"></div>
@@ -235,11 +276,13 @@
     <button id="play" class="big">Play!</button>
     <div class="keys desk-only">
       <b>W</b><b>A</b><b>S</b><b>D</b> move · mouse looks · click shoots<br>
-      <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload · <b>Esc</b> pause
+      <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload · <b>Esc</b> pause<br>
+      <b>1</b><b>2</b><b>3</b> or <b>E</b> place a defense · <b>Tab</b> or wheel picks one
     </div>
     <div class="keys touch-only">
       Left thumb moves (push all the way to run)<br>
-      Drag on the right to look · hold <b>FIRE</b> to shoot
+      Drag on the right to look · hold <b>FIRE</b> to shoot<br>
+      Tap a defense at the bottom to place it
     </div>
     <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
   </div>

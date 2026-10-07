@@ -136,6 +136,13 @@
     for (let j = cellOf(o.z0); j <= cellOf(o.z1); j++) for (let i = cellOf(o.x0); i <= cellOf(o.x1); i++) grid[j * GN + i].push(o);
     return o;
   }
+  function removeSolid(o) {
+    solids.splice(solids.indexOf(o), 1);
+    for (let j = cellOf(o.z0); j <= cellOf(o.z1); j++) for (let i = cellOf(o.x0); i <= cellOf(o.x1); i++) {
+      const cell = grid[j * GN + i], k = cell.indexOf(o);
+      if (k >= 0) cell.splice(k, 1);
+    }
+  }
   function rampHeight(o, x, z) { // ramp surface height at the point of its footprint nearest to (x, z)
     const t = o.axis === 'x' ? (clamp(x, o.x0, o.x1) - o.x0) / (o.x1 - o.x0) : (clamp(z, o.z0, o.z1) - o.z0) / (o.z1 - o.z0);
     return o.h * (o.dir > 0 ? t : 1 - t);
@@ -394,6 +401,7 @@
   decals.count = 0;
   scene.add(decals);
   let decalNext = 0;
+  const decalPos = new Float32Array(MAX_DECALS * 3);
   const _n = new T.Vector3();
   function addDecal(x, y, z, nx, ny, nz, color, size) {
     const i = decalNext; decalNext = (decalNext + 1) % MAX_DECALS;
@@ -403,6 +411,7 @@
     _q2.setFromAxisAngle(ZAXIS, Math.random() * Math.PI * 2);
     _q.multiply(_q2);
     _v.set(x + nx * 0.012, y + ny * 0.012, z + nz * 0.012);
+    decalPos[i * 3] = x; decalPos[i * 3 + 1] = y; decalPos[i * 3 + 2] = z;
     _m4.compose(_v, _q, _s.set(size, size, 1));
     decals.setMatrixAt(i, _m4);
     decals.setColorAt(i, _c.set(color));
@@ -410,6 +419,14 @@
     decals.instanceColor.needsUpdate = true;
   }
   function clearDecals() { decals.count = 0; decalNext = 0; }
+  function hideDecalsIn(o) { // paint on something that just broke goes with it
+    _m4.makeScale(0, 0, 0);
+    for (let i = 0; i < decals.count; i++) {
+      const x = decalPos[i * 3], y = decalPos[i * 3 + 1], z = decalPos[i * 3 + 2];
+      if (x > o.x0 - 0.05 && x < o.x1 + 0.05 && z > o.z0 - 0.05 && z < o.z1 + 0.05 && y > 0.02 && y < o.h + 0.05) decals.setMatrixAt(i, _m4);
+    }
+    decals.instanceMatrix.needsUpdate = true;
+  }
 
   // ---------- Paint bursts (one Points object) ----------
   const MAX_PARTS = 600;
@@ -481,6 +498,10 @@
     empty() { tone(1800, 1600, 0.03, 'square', 0.06); },
     block() { tone(900, 1700, 0.09, 'sine', 0.18); },
     spawn() { tone(440, 880, 0.18, 'sine', 0.15); },
+    pick() { tone(523, 523, 0.08, 'sine', 0.18); tone(659, 659, 0.08, 'sine', 0.18, 0.07); tone(784, 784, 0.16, 'sine', 0.18, 0.14); },
+    place(v = 1) { tone(220, 120, 0.12, 'triangle', 0.3 * v); noise(0.08, 500, 0.8, 0.25 * v, 'lowpass'); },
+    heal() { tone(880, 1320, 0.15, 'sine', 0.12); },
+    boom(v = 1) { noise(0.5, 300, 0.5, 0.9 * v, 'lowpass'); tone(160, 40, 0.5, 'sine', 0.6 * v); },
   };
 
   // ---------- Characters ----------
@@ -557,6 +578,7 @@
       maxHp: isBot ? BOT_HP : PLAYER_HP, hp: 0, alive: false, respawn: 0, shield: 0, deadT: 0,
       ammo: MAG_SIZE, reload: 0, cooldown: 0, stamina: STAMINA_MAX, kills: 0, deaths: 0, streak: 0,
       lastHitBy: null, walkT: 0, spots: 0,
+      buffs: {}, magSize: MAG_SIZE, items: [], sel: 0, healT: 0, // boosts and carried defenses
       // bot brain
       mode: 'wander', goal: null, goalT: 0, target: null, lastSeen: -99, seenX: 0, seenZ: 0, react: 0, think: Math.random() * 0.2,
       burst: 0, strafe: 1, strafeT: 0, cover: null, coverT: 0, stuckT: 0, lastX: 0, lastZ: 0, side: Math.random() < 0.5 ? 1 : -1,
@@ -574,6 +596,7 @@
     let best = null, bestScore = -1;
     for (let k = 0; k < 14; k++) {
       const c = pick(navPoints);
+      if (k < 13 && heightAt(c.x, c.z, 0.9) > 0) continue; // a barricade or turret is standing there
       let near = 99;
       for (const o of chars) if (o !== p && o.alive) near = Math.min(near, Math.hypot(o.x - c.x, o.z - c.z));
       if (near > bestScore) { bestScore = near; best = c; }
@@ -585,7 +608,9 @@
     p.x = s.x + rand(-0.5, 0.5); p.z = s.z + rand(-0.5, 0.5); p.y = 0; p.vx = p.vy = p.vz = 0; p.onGround = true;
     p.yaw = Math.atan2(p.x, p.z); // face the middle
     p.pitch = 0;
-    p.hp = p.maxHp; p.alive = true; p.shield = SPAWN_SHIELD; p.ammo = MAG_SIZE; p.reload = 0; p.cooldown = 0.3;
+    p.buffs = {}; p.magSize = MAG_SIZE; p.items = []; p.sel = 0; p.healT = 0; // boosts and carried defenses end when you're splatted
+    p.maxHp = p.isBot ? BOT_HP : PLAYER_HP;
+    p.hp = p.maxHp; p.alive = true; p.shield = SPAWN_SHIELD; p.ammo = p.magSize; p.reload = 0; p.cooldown = 0.3;
     p.stamina = STAMINA_MAX; p.target = null; p.mode = 'wander'; p.goal = null; p.lastHitBy = null; p.deadT = 0;
     clearSpots(p);
     p.m.g.visible = true; p.m.g.scale.set(1, 1, 1); p.m.shadow.visible = true;
@@ -600,9 +625,18 @@
   ballMesh.count = 0;
   scene.add(ballMesh);
   const balls = [];
-  function fireBall(owner, ox, oy, oz, dx, dy, dz) {
+  // owner gets the credit; src is a turret if one fired it
+  function fireBall(owner, ox, oy, oz, dx, dy, dz, dmg = 1, color = owner.color, src = null) {
     if (balls.length >= MAX_BALLS) balls.shift();
-    balls.push({ x: ox, y: oy, z: oz, vx: dx * BALL_SPEED, vy: dy * BALL_SPEED, vz: dz * BALL_SPEED, life: BALL_LIFE, owner, color: owner.color });
+    balls.push({ x: ox, y: oy, z: oz, vx: dx * BALL_SPEED, vy: dy * BALL_SPEED, vz: dz * BALL_SPEED, life: BALL_LIFE, owner, color, dmg, src });
+  }
+  // A shot from a person or bot: Triple Shot fans out 3 balls, the Golden Gun's count double.
+  function launch(p, ox, oy, oz, dx, dy, dz) {
+    const golden = !!p.buffs.golden;
+    for (const a of p.buffs.triple ? [-TRIPLE_SPREAD, 0, TRIPLE_SPREAD] : [0]) {
+      const cs = Math.cos(a), sn = Math.sin(a);
+      fireBall(p, ox, oy, oz, dx * cs + dz * sn, dy, -dx * sn + dz * cs, golden ? 2 : 1, golden ? GOLD : p.color);
+    }
   }
   function hitsBody(c, x, y, z) { // capsule around the blob body
     const ex = x - c.x, ez = z - c.z, h2 = ex * ex + ez * ez;
@@ -621,11 +655,13 @@
         const px = b.x, py = b.y, pz = b.z;
         b.vy -= BALL_GRAVITY * h;
         b.x += b.vx * h; b.y += b.vy * h; b.z += b.vz * h;
+        // shield domes stop enemy paint at the edge; turrets take hits
+        if (ballVsDeploys(b, px, py, pz)) { done = true; break; }
         // people
         for (const c of chars) {
-          if (!c.alive || c === b.owner) continue;
+          if (!c.alive || friendly(c, b.owner)) continue; // your own paint passes through you
           if (c.shield > 0 && inBubble(c, b.x, b.y, b.z)) { burst(b.x, b.y, b.z, '#bff6ff', 8, 3); if (c === me || b.owner === me) sfx.block(); done = true; break; }
-          if (hitsBody(c, b.x, b.y, b.z)) { hitChar(c, b.owner, b.x, b.y, b.z, b.vx, b.vz); done = true; break; }
+          if (hitsBody(c, b.x, b.y, b.z)) { hitChar(c, b.owner, b.x, b.y, b.z, b.dmg, b.color, b.src); done = true; break; }
         }
         if (done) break;
         // the fence
@@ -642,6 +678,8 @@
         // boxes and ramps
         const o = solidAtPoint(b.x, b.z, b.y);
         if (o) {
+          // any paint wears a barricade down, its owner's included; turrets only take enemy paint
+          if (o.dep && (o.dep.type === 'wall' || !friendly(o.dep.owner, b.owner))) hitDeploy(o.dep);
           if (o.ramp) {
             const top = rampHeight(o, px, pz);
             if (py >= top - 0.05) { // landed on the slope
@@ -679,34 +717,38 @@
     if (me && me.alive) { const d = Math.hypot(x - me.x, z - me.z); if (d < 14) sfx.splat(0.35 * (1 - d / 14)); }
   }
 
-  function hitChar(c, shooter, x, y, z, bvx, bvz) {
+  // shooter gets the credit; src is the turret or mine that did it, if any
+  function hitChar(c, shooter, x, y, z, dmg = 1, color = shooter.color, src = null) {
+    if (!c.alive) return;
+    if (c.shield > 0) { burst(x, y, z, '#bff6ff', 8, 3); return; }
     // a spot of paint on them, where it hit
     if (c.spots < 10) {
       const lx = x - c.x, ly = y - (c.y + 0.85), lz = z - c.z;
       const cs = Math.cos(-c.yaw), sn = Math.sin(-c.yaw);
       _v.set(lx * cs + lz * sn, ly, -lx * sn + lz * cs).normalize();
-      const s = new T.Mesh(shared.spot, paintMat(shooter.color));
+      const s = new T.Mesh(shared.spot, paintMat(color));
       s.position.set(_v.x * 0.45, 0.85 + _v.y * 0.6, _v.z * 0.45);
       s.scale.set(1, 1, 0.45);
       s.lookAt(_v.x * 2, 0.85 + _v.y * 2, _v.z * 2);
       c.m.spots.add(s); c.spots++;
     }
-    burst(x, y, z, shooter.color, 12, 3.5);
-    c.hp -= 1;
+    burst(x, y, z, color, 12, 3.5);
+    c.hp = Math.max(0, c.hp - dmg);
     c.lastHitBy = shooter;
     c.hurtBy = shooter; c.hurtT = 3;
-    if (c.isBot) botHurt(c, shooter);
-    if (c === me) hurtFx(shooter, x, z);
-    if (c.hp <= 0) splatChar(c, shooter);
+    if (c.isBot) botHurt(c, src && src.alive ? src : shooter);
+    if (c === me) hurtFx(src || shooter, color);
+    if (c.hp <= 0) splatChar(c, shooter, src);
     else if (shooter === me) { hitMarker(false); sfx.hit(); }
   }
-  function splatChar(c, killer) {
+  function splatChar(c, killer, src) {
     c.alive = false; c.respawn = RESPAWN_TIME; c.deadT = 0; c.deaths++; c.streak = 0;
     if (killer && killer !== c) { killer.kills++; killer.streak++; }
     burst(c.x, c.y + 0.9, c.z, killer.color, 46, 6);
     burst(c.x, c.y + 0.9, c.z, c.color, 16, 4);
     addDecal(c.x, heightAt(c.x, c.z, 0) + 0.005, c.z, 0, 1, 0, killer.color, 2.6);
-    addFeed(killer, c);
+    addFeed(killer, c, src ? POWERUPS[src.type].icon : '');
+    if (Math.random() < DROP_CHANCE) spawnDrop(c.x, heightAt(c.x, c.z, 0), c.z); // half of all splats drop something
     if (killer === me) { hitMarker(true); sfx.kill(); splatPopup(c); }
     else if (me && me.alive) { const d = Math.hypot(c.x - me.x, c.z - me.z); if (d < 30) sfx.splat(0.8 * (1 - d / 30)); }
     if (c === me) { sfx.splatted(); setDeadUI(true, killer); }
@@ -752,13 +794,364 @@
 
   function canShoot(p) { return p.alive && p.cooldown <= 0 && p.reload <= 0 && p.ammo > 0; }
   function startReload(p) {
-    if (p.reload > 0 || p.ammo >= MAG_SIZE || !p.alive) return;
-    p.reload = RELOAD_TIME;
+    if (p.reload > 0 || p.ammo >= p.magSize || !p.alive) return;
+    p.reload = RELOAD_TIME * (p.buffs.mag ? 0.6 : 1);
     if (p === me) sfx.reload();
   }
   function useAmmo(p) {
-    p.ammo--; p.cooldown = FIRE_DELAY; p.shield = 0; // shooting drops your spawn shield
+    p.ammo--; p.cooldown = FIRE_DELAY * (p.buffs.rapid ? 0.5 : 1); p.shield = 0; // shooting drops your spawn shield
     if (p.ammo <= 0) startReload(p);
+  }
+
+  // ---------- Power-ups and defenses (same rules as the top-down game) ----------
+  // Half of all splats drop something. Boosts work right away and last until you're splatted. Defenses go in one
+  // of 3 carry slots; once placed, the ones that can be shot down (barricade, turret) and the mine stay until
+  // destroyed or set off, up to 3 standing per player. The others run on a timer.
+  // w = weight: out of every 114 drops, roughly this many are that kind (rarer = stronger).
+  const DROP_CHANCE = 0.5, DROP_LIFETIME = 20;
+  const POWERUPS = {
+    heart:  { w: 15, name: 'Extra Heart',   icon: '♥', color: '#ff4d6d', desc: '+1 max health and a full heal' },
+    rapid:  { w: 15, name: 'Rapid Fire',    icon: '⚡', color: '#ffd23d', desc: 'Shoot twice as fast' },
+    speed:  { w: 12, name: 'Speed Boots',   icon: '»', color: '#3dfff0', desc: 'Run 30% faster' },
+    mag:    { w: 12, name: 'Big Hopper',    icon: '▤', color: '#9cff3d', desc: '24 paintballs and faster reloads' },
+    triple: { w: 9,  name: 'Triple Shot',   icon: '⁂', color: '#ff8a3d', desc: 'Every shot fires 3 paintballs' },
+    golden: { w: 3,  name: 'Golden Gun',    icon: '★', color: '#ffc800', desc: 'Every hit counts double' },
+    wall:   { w: 12, place: true, name: 'Barricade',     icon: '▮', color: '#a0b4c8', desc: 'A wall anyone can hide behind, until it takes 8 hits' },
+    heal:   { w: 9,  place: true, name: 'Heal Station',  icon: '✚', color: '#3dff8b', desc: 'Heals anyone standing in it (20s)' },
+    dome:   { w: 7,  place: true, name: 'Shield Dome',   icon: '◠', color: '#7fd4ff', desc: "Enemy paint can't get in (10s)" },
+    turret: { w: 6,  place: true, name: 'Sentry Turret', icon: '⊕', color: '#c78bff', desc: 'Shoots enemies near it until it takes 5 hits' },
+    bush:   { w: 8,  place: true, name: 'Bush',          icon: '🌳', color: '#4cbb4c', desc: "A hiding spot: bots can't see you inside (90s)" },
+    mine:   { w: 6,  place: true, name: 'Paint Mine',    icon: '💣', color: '#ff5a3d', desc: 'A hidden trap: an enemy who steps on it takes 2 hits' },
+  };
+  const MAX_CARRY = 3;     // defenses you can carry at once (slots 1-3)
+  const MAX_LASTING = 3;   // barricades + turrets + mines one player can have standing; a 4th replaces their oldest
+  const DEPLOY = {         // ttl 0 = no timer. Sizes in meters.
+    wall:   { ttl: 0, hp: 8 },
+    heal:   { ttl: 20, r: 1.8 },
+    dome:   { ttl: 10, r: 2.6 },
+    turret: { ttl: 0, hp: 5, range: 20, rate: 0.5 },
+    bush:   { ttl: 90, r: 1.6 },
+    mine:   { ttl: 0, r: 2.6, trigger: 0.9, arm: 1 }, // waits until someone steps on it
+  };
+  const GOLD = '#ffc800', TRIPLE_SPREAD = 0.06;
+  const friendly = (a, b) => a === b; // teams arrive with multiplayer
+
+  // round badge with the item's symbol, for drops and floating labels
+  const iconTexCache = {};
+  function iconTex(type) {
+    if (!iconTexCache[type]) {
+      const P = POWERUPS[type];
+      iconTexCache[type] = new T.CanvasTexture(canvasTex(128, (ctx) => {
+        ctx.beginPath(); ctx.arc(64, 64, 56, 0, 7); ctx.fillStyle = P.color; ctx.fill();
+        ctx.lineWidth = 9; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+        ctx.font = '900 66px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1c2230';
+        ctx.fillText(P.icon, 64, 68);
+      }));
+    }
+    return iconTexCache[type];
+  }
+  const itemGeo = {
+    ring: new T.TorusGeometry(0.45, 0.06, 6, 24).rotateX(Math.PI / 2),
+    beam: new T.CylinderGeometry(0.05, 0.05, 3.2, 6, 1, true).translate(0, 1.6, 0),
+    healRing: new T.TorusGeometry(1, 0.07, 6, 32).rotateX(Math.PI / 2),
+    healCol: new T.CylinderGeometry(1, 1, 1.3, 24, 1, true).translate(0, 0.65, 0),
+    dome: new T.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    box: new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
+    tBase: new T.CylinderGeometry(0.26, 0.36, 0.55, 8).translate(0, 0.275, 0),
+    tHead: new T.SphereGeometry(0.28, 14, 10),
+    tBarrel: new T.CylinderGeometry(0.06, 0.07, 0.5, 8).rotateX(Math.PI / 2).translate(0, 0, -0.3),
+    mine: new T.CylinderGeometry(0.32, 0.36, 0.1, 12).translate(0, 0.05, 0),
+    light: new T.SphereGeometry(0.09, 8, 6),
+    bush: new T.IcosahedronGeometry(1, 1),
+  };
+
+  // ----- drops on the ground -----
+  const drops = [];
+  function rollDrop() {
+    const types = Object.keys(POWERUPS);
+    let n = Math.random() * types.reduce((t, k) => t + POWERUPS[k].w, 0);
+    for (const k of types) { n -= POWERUPS[k].w; if (n < 0) return k; }
+    return types[0];
+  }
+  function spawnDrop(x, y, z, type = rollDrop()) {
+    const col = POWERUPS[type].color, g = new T.Group();
+    const ring = new T.Mesh(itemGeo.ring, new T.MeshBasicMaterial({ color: col })); ring.position.y = 0.1;
+    const beam = new T.Mesh(itemGeo.beam, new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3, depthWrite: false }));
+    const icon = new T.Sprite(new T.SpriteMaterial({ map: iconTex(type) })); icon.scale.set(0.85, 0.85, 1); icon.position.y = 0.9;
+    g.add(ring, beam, icon); g.position.set(x, y, z); scene.add(g);
+    const d = { type, x, y, z, ttl: DROP_LIFETIME, g, icon, ring, phase: Math.random() * 6 };
+    drops.push(d);
+    return d;
+  }
+  function removeDrop(d) {
+    scene.remove(d.g);
+    d.g.traverse((o) => { if (o.material) o.material.dispose(); });
+    drops.splice(drops.indexOf(d), 1);
+  }
+  function givePowerup(p, type) {
+    const b = p.buffs;
+    if (type === 'heart') {
+      const base = p.isBot ? BOT_HP : PLAYER_HP;
+      p.maxHp = Math.min(base + 3, p.maxHp + 1);
+      p.hp = p.maxHp;
+    } else if (type === 'mag') {
+      b.mag = 1; p.magSize = MAG_SIZE * 2;
+      if (p.reload <= 0) p.ammo = p.magSize;
+    } else if (POWERUPS[type].place) {
+      if (p.items.length < MAX_CARRY) p.items.push(type); // updateDrops never hands one to a full player
+    } else {
+      b[type] = 1;
+    }
+  }
+  let fullNoteT = 0;
+  function updateDrops(dt) {
+    fullNoteT -= dt;
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i];
+      d.ttl -= dt;
+      if (d.ttl <= 0) { removeDrop(d); continue; }
+      d.icon.position.y = 0.9 + Math.sin(now * 3 + d.phase) * 0.12;
+      d.ring.rotation.y += dt * 2;
+      d.g.visible = d.ttl > 4 || Math.floor(d.ttl * 5) % 2 === 0; // blinks before it fades
+      // with all 3 carry slots full, a defense stays on the ground for someone else
+      const place = POWERUPS[d.type].place;
+      const near = (p) => p.alive && Math.hypot(p.x - d.x, p.z - d.z) < 1.1 && Math.abs(p.y - d.y) < 1.4;
+      const taker = chars.find((p) => near(p) && (!place || p.items.length < MAX_CARRY));
+      if (!taker) {
+        if (me && near(me) && fullNoteT <= 0) { fullNoteT = 3; toast('Your 3 defense slots are full. Place one to make room!', '#ffffff'); }
+        continue;
+      }
+      givePowerup(taker, d.type);
+      removeDrop(d);
+      if (taker === me) {
+        const P = POWERUPS[d.type];
+        sfx.pick();
+        const how = !place ? '' : touchMode ? ' · tap it below to place it' : ` · press ${me.items.length} to place it`;
+        toast(`<b>${P.icon} ${P.name}!</b> ${P.desc}${how}`, P.color);
+        hudKey = '';
+      }
+    }
+  }
+
+  // ----- placed defenses -----
+  const deploys = [];
+  function placeItem(p, slot = p.sel) {
+    if (!p || !p.alive || !Number.isInteger(slot) || slot < 0 || slot >= p.items.length) return false;
+    const type = p.items.splice(slot, 1)[0], cfg = DEPLOY[type];
+    p.sel = clamp(p.sel, 0, Math.max(0, p.items.length - 1));
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), lim = HALF - 1;
+    const d = { type, owner: p, color: p.color, ttl: cfg.ttl, hp: cfg.hp || 0, x: p.x, y: p.y, z: p.z, yaw: p.yaw, cool: 0, flash: 0,
+      alive: true, shield: 0, vx: 0, vz: 0, born: now };
+    if (type === 'wall') { d.x = p.x + fx * 1.7; d.z = p.z + fz * 1.7; }        // stands across your line of fire
+    else if (type === 'turret') { d.x = p.x + fx * 1.3; d.z = p.z + fz * 1.3; d.aimH = 0.75; }
+    else if (type === 'mine') d.cool = cfg.arm;                                     // arms after a moment
+    d.x = clamp(d.x, -lim, lim); d.z = clamp(d.z, -lim, lim);
+    if (type === 'wall' || type === 'turret') d.y = heightAt(d.x, d.z, 0);
+    if (type === 'wall') {
+      const across = Math.abs(fx) >= Math.abs(fz); // facing along x: the wall runs along z
+      d.w = across ? 0.5 : 2.8; d.d = across ? 2.8 : 0.5;
+      d.solid = addSolid({ x0: d.x - d.w / 2, x1: d.x + d.w / 2, z0: d.z - d.d / 2, z1: d.z + d.d / 2, h: d.y + 2, kind: 'barricade', dep: d });
+    } else if (type === 'turret') {
+      d.solid = addSolid({ x0: d.x - 0.3, x1: d.x + 0.3, z0: d.z - 0.3, z1: d.z + 0.3, h: d.y + 0.55, kind: 'turret', dep: d });
+    } else if (type === 'bush') {
+      d.zone = { x: d.x, z: d.z, r: cfg.r * 0.95, top: d.y + 1.75, kind: 'bush' }; hideZones.push(d.zone);
+      d.leaf = { x: d.x, y: d.y + 0.75, z: d.z, r: cfg.r * 0.95 }; leafBalls.push(d.leaf);
+    }
+    buildDeployModel(d);
+    deploys.push(d);
+    if (!cfg.ttl) { // lasting defenses never time out, so cap how many each player has up at once
+      const mine = deploys.filter((q) => q.owner === p && !DEPLOY[q.type].ttl);
+      if (mine.length > MAX_LASTING) removeDeploy(mine[0], true);
+    }
+    if (p === me) { sfx.place(); hudKey = ''; }
+    else if (me && me.alive && state === 'play' && Math.hypot(d.x - me.x, d.z - me.z) < 25) sfx.place(0.4);
+    return true;
+  }
+  function removeDeploy(d, broke) {
+    if (!d.alive) return;
+    d.alive = false;
+    deploys.splice(deploys.indexOf(d), 1);
+    scene.remove(d.g);
+    d.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); });
+    if (d.solid) { removeSolid(d.solid); hideDecalsIn(d.solid); }
+    if (d.zone) hideZones.splice(hideZones.indexOf(d.zone), 1);
+    if (d.leaf) leafBalls.splice(leafBalls.indexOf(d.leaf), 1);
+    if (broke) burst(d.x, d.y + 0.8, d.z, POWERUPS[d.type].color, 30, 5);
+    for (const b of chars) if (b.target === d) b.target = null;
+  }
+  function hitDeploy(d) {
+    if (!DEPLOY[d.type].hp) return;
+    d.hp--; d.flash = 0.12;
+    if (d.hp <= 0) removeDeploy(d, true);
+  }
+  function inHeal(p) {
+    for (const d of deploys) if (d.type === 'heal' && Math.hypot(p.x - d.x, p.z - d.z) < DEPLOY.heal.r && Math.abs(p.y - d.y) < 2) return true;
+    return false;
+  }
+  // Domes stop enemy paint coming in from outside (paint already inside, and the owner's, passes).
+  // Turrets take hits from enemy paint. Returns true if the ball is used up.
+  function ballVsDeploys(b, px, py, pz) {
+    for (const d of deploys) {
+      if (friendly(d.owner, b.owner)) continue;
+      if (d.type === 'dome') {
+        const r = DEPLOY.dome.r, inNow = (b.x - d.x) ** 2 + (b.y - d.y) ** 2 + (b.z - d.z) ** 2 < r * r && b.y >= d.y - 0.1;
+        const inBefore = (px - d.x) ** 2 + (py - d.y) ** 2 + (pz - d.z) ** 2 < r * r && py >= d.y - 0.1;
+        if (inNow && !inBefore) { burst(b.x, b.y, b.z, '#7fd4ff', 8, 3); d.flash = 0.15; if (d.owner === me) sfx.block(); return true; }
+      } else if (d.type === 'turret') {
+        if ((b.x - d.x) ** 2 + (b.y - d.y - 0.75) ** 2 + (b.z - d.z) ** 2 < 0.45 * 0.45) {
+          burst(b.x, b.y, b.z, b.color, 8, 3); hitDeploy(d);
+          if (b.owner === me) { hitMarker(false); sfx.hit(); }
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function boom(d) {
+    removeDeploy(d, false);
+    const R = DEPLOY.mine.r;
+    burst(d.x, d.y + 0.3, d.z, d.color, 70, 8);
+    addDecal(d.x, d.y + 0.006, d.z, 0, 1, 0, d.color, 3.6);
+    for (let k = 0; k < 5; k++) {
+      const a = Math.random() * 6.28, r = rand(1, R);
+      const x = d.x + Math.cos(a) * r, z = d.z + Math.sin(a) * r;
+      addDecal(x, heightAt(x, z, 0) + 0.006, z, 0, 1, 0, d.color, rand(0.6, 1.1));
+    }
+    if (me && state === 'play') { const dd = Math.hypot(d.x - me.x, d.z - me.z); if (dd < 40) sfx.boom(1 - dd / 40); }
+    for (const q of chars) { // everyone nearby except the owner's side takes 2 hits, counted as the owner's
+      if (!q.alive || friendly(q, d.owner) || Math.hypot(q.x - d.x, q.z - d.z) > R || Math.abs(q.y - d.y) > 2) continue;
+      hitChar(q, d.owner, q.x, q.y + 0.8, q.z, 2, d.color, d);
+    }
+  }
+  function updateDeploys(dt) {
+    for (const d of deploys.slice()) {
+      const cfg = DEPLOY[d.type], timed = cfg.ttl > 0;
+      if (timed) d.ttl -= dt;
+      if (timed && d.ttl <= 0) { removeDeploy(d, false); continue; }
+      d.flash = Math.max(0, d.flash - dt);
+      if (d.type === 'heal') {
+        // heals anyone standing in it, friend or foe
+        for (const q of chars) {
+          if (!q.alive || Math.hypot(q.x - d.x, q.z - d.z) >= cfg.r || Math.abs(q.y - d.y) > 2) continue;
+          q.healT += dt;
+          if (q.healT >= 1.5 && q.hp < q.maxHp) {
+            q.healT = 0; q.hp++;
+            burst(q.x, q.y + 1, q.z, '#3dff8b', 14, 2.5);
+            if (q === me) { sfx.heal(); hudKey = ''; }
+          }
+        }
+        if (Math.random() < dt * 6) burst(d.x + rand(-1.2, 1.2), d.y + 0.1, d.z + rand(-1.2, 1.2), '#9dffc0', 1, 1.2);
+      } else if (d.type === 'mine') {
+        if (d.cool > 0) d.cool -= dt;
+        else if (chars.some((q) => q.alive && !friendly(q, d.owner) && Math.hypot(q.x - d.x, q.z - d.z) < cfg.trigger && Math.abs(q.y - d.y) < 1.2)) {
+          boom(d);
+          continue;
+        }
+      } else if (d.type === 'turret') {
+        d.cool -= dt;
+        let best = null, bestD = cfg.range;
+        const hx = d.x, hy = d.y + 0.75, hz = d.z;
+        for (const o of chars) {
+          if (friendly(o, d.owner) || !o.alive || o.shield > 0) continue;
+          const dd = Math.hypot(o.x - hx, o.z - hz);
+          if (dd > bestD || (concealed(o) && dd > HIDE_NEAR) || !clearLine(hx, hy, hz, o.x, o.y + 0.9, o.z, dd > HIDE_NEAR)) continue;
+          best = o; bestD = dd;
+        }
+        if (best) {
+          const lead = (bestD / BALL_SPEED) * 0.5, tx = best.x + best.vx * lead, tz = best.z + best.vz * lead;
+          const want = Math.atan2(-(tx - hx), -(tz - hz));
+          d.yaw += clamp(angDiff(d.yaw, want), -6 * dt, 6 * dt);
+          if (d.cool <= 0 && Math.abs(angDiff(d.yaw, want)) < 0.2) {
+            d.cool = cfg.rate;
+            const time = bestD / BALL_SPEED, a = d.yaw + rand(-0.06, 0.06);
+            const pitch = Math.atan2(best.y + 0.85 - hy + 0.5 * BALL_GRAVITY * time * time, bestD) + rand(-0.03, 0.03), cp = Math.cos(pitch);
+            const dx = -Math.sin(a) * cp, dy = Math.sin(pitch), dz = -Math.cos(a) * cp;
+            // the turret's paintballs count as its owner's, so its splats go on their score
+            fireBall(d.owner, hx + dx * 0.6, hy + dy * 0.6, hz + dz * 0.6, dx, dy, dz, 1, d.color, d);
+            d.recoil = 1;
+            if (me && state === 'play') { const dm = Math.hypot(hx - me.x, hz - me.z); if (dm < 35) sfx.shot(0.35 * (1 - dm / 35)); }
+          }
+        }
+      }
+      animateDeploy(d, dt);
+    }
+  }
+  function ownMat(params) { const m = new T.MeshLambertMaterial(params); m.userData.own = true; return m; }
+  function ownBasic(params) { const m = new T.MeshBasicMaterial(params); m.userData.own = true; return m; }
+  function buildDeployModel(d) {
+    const g = new T.Group(), cfg = DEPLOY[d.type];
+    g.position.set(d.x, 0, d.z);
+    if (d.type === 'wall') {
+      d.mat = ownMat({ color: '#a0b4c8', emissive: 0x000000 });
+      const wall = new T.Mesh(itemGeo.box, d.mat); wall.scale.set(d.w, d.y + 2, d.d);
+      const stripe = new T.Mesh(itemGeo.box, ownMat({ color: d.color })); stripe.scale.set(d.w + 0.04, 0.22, d.d + 0.04); stripe.position.y = d.y + 1.7;
+      g.add(wall, stripe);
+    } else if (d.type === 'heal') {
+      g.position.y = d.y;
+      const ring = new T.Mesh(itemGeo.healRing, ownBasic({ color: '#3dff8b' })); ring.scale.setScalar(cfg.r); ring.position.y = 0.05;
+      const col = new T.Mesh(itemGeo.healCol, ownBasic({ color: '#3dff8b', transparent: true, opacity: 0.16, depthWrite: false, side: T.DoubleSide }));
+      col.scale.set(cfg.r, 1, cfg.r);
+      const icon = new T.Sprite(new T.SpriteMaterial({ map: iconTex('heal') })); icon.material.userData.own = true; icon.scale.set(0.7, 0.7, 1); icon.position.y = 2.1;
+      d.icon = icon;
+      g.add(ring, col, icon);
+    } else if (d.type === 'dome') {
+      g.position.y = d.y;
+      d.mat = ownBasic({ color: '#7fd4ff', transparent: true, opacity: 0.22, depthWrite: false, side: T.DoubleSide });
+      const dome = new T.Mesh(itemGeo.dome, d.mat); dome.scale.setScalar(cfg.r);
+      const ring = new T.Mesh(itemGeo.healRing, ownBasic({ color: d.color })); ring.scale.setScalar(cfg.r); ring.position.y = 0.05;
+      g.add(dome, ring);
+    } else if (d.type === 'turret') {
+      g.position.y = d.y;
+      d.mat = ownMat({ color: d.color, emissive: 0x000000 });
+      const base = new T.Mesh(itemGeo.tBase, shared.dark);
+      const head = new T.Group(); head.position.y = 0.75;
+      head.add(new T.Mesh(itemGeo.tHead, d.mat), new T.Mesh(itemGeo.tBarrel, shared.dark));
+      const eye = new T.Mesh(itemGeo.light, shared.white); eye.position.set(0, 0.08, -0.24); eye.scale.set(1.3, 0.6, 0.6); head.add(eye);
+      d.head = head;
+      g.add(base, head);
+    } else if (d.type === 'bush') {
+      g.position.y = d.y;
+      const col = new T.Color().setHSL(0.3, 0.6, 0.4);
+      const mat = ownMat({ color: col });
+      const parts = [[0, 0.65, 0, 1, 0.72], [0.5, 0.5, 0.3, 0.7, 0.6], [-0.4, 0.5, -0.35, 0.7, 0.6]];
+      for (const [x, y, z, s, sy] of parts) { const m = new T.Mesh(itemGeo.bush, mat); m.position.set(x, y, z); m.scale.set(cfg.r * s, cfg.r * sy, cfg.r * s); g.add(m); }
+    } else if (d.type === 'mine') {
+      g.position.y = d.y;
+      const disc = new T.Mesh(itemGeo.mine, shared.dark);
+      d.lightMat = ownBasic({ color: d.color });
+      const light = new T.Mesh(itemGeo.light, d.lightMat); light.position.y = 0.13;
+      g.add(disc, light);
+      g.visible = d.owner === me; // only you (and later your teammates) can see your mines
+    }
+    scene.add(g);
+    d.g = g;
+  }
+  function animateDeploy(d, dt) {
+    const cfg = DEPLOY[d.type];
+    if (cfg.ttl) d.g.visible = d.ttl > 3 || Math.floor(d.ttl * 5) % 2 === 0; // blinks before its time runs out
+    if (d.type === 'wall') {
+      const wear = 1 - d.hp / cfg.hp;
+      d.mat.color.setRGB(0.63 - wear * 0.25, 0.71 - wear * 0.25, 0.78 - wear * 0.2);
+      d.mat.emissive.setScalar(d.flash > 0 ? 0.5 : 0);
+      d.g.position.x = d.x + (d.flash > 0 ? Math.sin(now * 90) * 0.03 : 0);
+    } else if (d.type === 'turret') {
+      d.recoil = Math.max(0, (d.recoil || 0) - dt * 8);
+      d.head.rotation.y = d.yaw;
+      d.head.position.y = 0.75 - (d.recoil || 0) * 0.03;
+      d.mat.emissive.setScalar(d.flash > 0 ? 0.6 : 0);
+    } else if (d.type === 'dome') {
+      d.mat.opacity = d.flash > 0 ? 0.45 : 0.2 + Math.sin(now * 3) * 0.04;
+    } else if (d.type === 'heal') {
+      d.icon.position.y = 2.1 + Math.sin(now * 2.5) * 0.1;
+    } else if (d.type === 'mine') {
+      d.g.visible = d.owner === me;
+      d.lightMat.color.set(d.cool > 0 || Math.floor(now * 2) % 2 ? d.color : '#ffffff');
+    }
+  }
+  function clearItems() {
+    while (drops.length) removeDrop(drops[0]);
+    while (deploys.length) removeDeploy(deploys[0], false);
   }
 
   // ---------- Bots ----------
@@ -792,6 +1185,12 @@
       const score = d - (o === b.target ? 6 : 0) + (o.shield > 0 ? 15 : 0);
       if (score < bestScore) { bestScore = score; best = o; }
     }
+    // enemy turrets are fair game too (otherwise they'd never come down)
+    for (const t of deploys) {
+      if (t.type !== 'turret' || friendly(b, t.owner)) continue;
+      const d = Math.hypot(t.x - b.x, t.z - b.z);
+      if (d + 4 < bestScore && canSee(b, t)) { bestScore = d + 4; best = t; }
+    }
     if (best) {
       if (best !== b.target) b.react = rand(0.55, 1.0); // a moment to react, so they don't snap onto you
       b.target = best; b.lastSeen = now; b.seenX = best.x; b.seenZ = best.z;
@@ -800,6 +1199,18 @@
       if (b.target.alive) { b.goal = { x: b.seenX, z: b.seenZ }; b.goalT = 8; } // go look where they were
       b.target = null;
       if (b.mode === 'fight') b.mode = 'wander';
+    }
+    // put a defense down in a fight (a heal station only once hurt)
+    if (b.target && b.items.length && b.react <= 0 && Math.random() < 0.1) {
+      const slot = b.hp < b.maxHp && b.items.includes('heal') ? b.items.indexOf('heal') : b.items.findIndex((k) => k !== 'heal');
+      if (slot >= 0) placeItem(b, slot);
+    }
+    // with nobody around: go heal up, or grab something lying nearby
+    if (!b.target && b.mode === 'wander') {
+      const heal = b.hp < b.maxHp && deploys.find((d) => d.type === 'heal' && Math.hypot(d.x - b.x, d.z - b.z) < 25);
+      const goal = heal || drops.find((d) => Math.hypot(d.x - b.x, d.z - b.z) < 18 && (!POWERUPS[d.type].place || b.items.length < MAX_CARRY) &&
+        clearLine(b.x, b.y + EYE, b.z, d.x, d.y + 0.8, d.z, false));
+      if (goal) { b.goal = { x: goal.x, z: goal.z }; b.goalT = 8; b.goalNear = heal ? 0.6 : 0.5; }
     }
   }
   function findCover(b, threat) {
@@ -844,13 +1255,14 @@
     b.think -= dt; b.hurtT -= dt;
     if (b.think <= 0) { b.think = 0.2; botPerceive(b); }
     if (b.cooldown > 0) b.cooldown -= dt;
-    if (b.reload > 0) { b.reload -= dt; if (b.reload <= 0) b.ammo = MAG_SIZE; }
-    let mx = 0, mz = 0, speed = BOT_SPEED, faceYaw = null;
+    if (b.reload > 0) { b.reload -= dt; if (b.reload <= 0) b.ammo = b.magSize; }
+    const BS = BOT_SPEED * (b.buffs.speed ? 1.3 : 1);
+    let mx = 0, mz = 0, speed = BS, faceYaw = null;
     const t = b.target && b.target.alive ? b.target : null;
     if (b.mode === 'cover' && b.cover) {
       const dx = b.cover.x - b.x, dz = b.cover.z - b.z, d = Math.hypot(dx, dz);
-      if (d > 0.8) { [mx, mz] = steer(b, dx, dz); speed = BOT_SPEED * 1.2; }
-      else { b.coverT -= dt; if (b.ammo < MAG_SIZE) startReload(b); }
+      if (d > 0.8) { [mx, mz] = steer(b, dx, dz); speed = BS * 1.2; }
+      else { b.coverT -= dt; if (b.ammo < b.magSize) startReload(b); }
       b.coverMax -= dt;
       if (b.coverT <= 0 || b.coverMax <= 0) { b.mode = t ? 'fight' : 'wander'; b.cover = null; }
       if (t) faceYaw = Math.atan2(-(t.x - b.x), -(t.z - b.z));
@@ -863,13 +1275,15 @@
       const radial = d > 20 ? 1 : d < 8 ? -0.8 : 0;
       [mx, mz] = steer(b, ux * radial + -uz * b.strafe, uz * radial + ux * b.strafe);
       if (radial === 0 && b.strafe === 0) { mx = 0; mz = 0; }
-      speed = BOT_SPEED * 0.75;
+      speed = BS * 0.75;
+    } else if (b.hp < b.maxHp && inHeal(b)) {
+      // stand in the heal station until healed
     } else {
       if (!b.goal || (b.goalT -= dt) <= 0) newGoal(b);
       const dx = b.goal.x - b.x, dz = b.goal.z - b.z, d = Math.hypot(dx, dz);
-      if (d < 1.5) { b.goal = null; b.goalT = 0; }
+      if (d < (b.goalNear || 1.5)) { b.goal = null; b.goalT = 0; b.goalNear = 0; }
       else [mx, mz] = steer(b, dx, dz);
-      if (b.ammo < MAG_SIZE && b.reload <= 0) startReload(b);
+      if (b.ammo < b.magSize && b.reload <= 0) startReload(b);
     }
     // stuck? pick somewhere else and go around the other way
     b.stuckT += dt;
@@ -893,20 +1307,20 @@
         if (b.burst <= 0) { b.burst = 2 + ((Math.random() * 3) | 0); }
         botShoot(b, t);
         b.burst--;
-        b.cooldown = b.burst > 0 ? 0.24 : rand(0.9, 1.7);
+        b.cooldown = (b.burst > 0 ? 0.24 : rand(0.9, 1.7)) * (b.buffs.rapid ? 0.6 : 1);
       }
     }
   }
   function botShoot(b, t) {
     const ox = b.x, oy = b.y + 1.0, oz = b.z;
-    const tx = t.x, ty = t.y + 0.85, tz = t.z;
+    const tx = t.x, ty = t.y + (t.aimH || 0.85), tz = t.z;
     const d = Math.hypot(tx - ox, tz - oz), time = d / BALL_SPEED;
     let yaw = Math.atan2(-(tx - ox), -(tz - oz));
     let pitch = Math.atan2(ty - oy + 0.5 * BALL_GRAVITY * time * time, d);
     const err = 0.045 + Math.random() * 0.03;
     yaw += (Math.random() * 2 - 1) * err; pitch += (Math.random() * 2 - 1) * err * 0.6;
     const cp = Math.cos(pitch);
-    fireBall(b, ox - Math.sin(yaw) * 0.6, oy, oz - Math.cos(yaw) * 0.6, -Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
+    launch(b, ox - Math.sin(yaw) * 0.6, oy, oz - Math.cos(yaw) * 0.6, -Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
     useAmmo(b);
     if (me && state === 'play') { const dd = Math.hypot(b.x - me.x, b.z - me.z); if (dd < 40) sfx.shot(0.45 * (1 - dd / 40)); }
   }
@@ -961,7 +1375,7 @@
     const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
     const sp = 0.008;
     ax += rand(-sp, sp); ay += rand(-sp, sp); az += rand(-sp, sp);
-    fireBall(me, ox, oy, oz, ax, ay, az);
+    launch(me, ox, oy, oz, ax, ay, az);
     useAmmo(me);
     sfx.shot(0.9);
     recoil = 1; flashT = 0.05;
@@ -984,7 +1398,7 @@
 
   function updateMe(dt) {
     if (me.cooldown > 0) me.cooldown -= dt;
-    if (me.reload > 0) { me.reload -= dt; if (me.reload <= 0) me.ammo = MAG_SIZE; }
+    if (me.reload > 0) { me.reload -= dt; if (me.reload <= 0) me.ammo = me.magSize; }
     let fwd = 0, side = 0;
     if (keys.KeyW || keys.ArrowUp) fwd += 1;
     if (keys.KeyS || keys.ArrowDown) fwd -= 1;
@@ -994,7 +1408,7 @@
     const mag = Math.hypot(fwd, side);
     if (mag > 1) { fwd /= mag; side /= mag; }
     const sprintWanted = (keys.ShiftLeft || keys.ShiftRight || input.sprintTouch) && fwd > 0.3;
-    let speed = WALK;
+    let speed = WALK * (me.buffs.speed ? 1.3 : 1);
     if (sprintWanted && me.stamina > 0) { speed *= SPRINT_MULT; me.stamina = Math.max(0, me.stamina - dt); me.sprintLock = 0.6; }
     else { me.sprintLock = (me.sprintLock || 0) - dt; if (me.sprintLock <= 0) me.stamina = Math.min(STAMINA_MAX, me.stamina + dt * 0.6); }
     if (concealed(me)) speed *= 0.85;
@@ -1036,6 +1450,10 @@
     if (e.button === 0) { initAudio(); mouseDown = true; }
   });
   window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  canvas.addEventListener('mousedown', (e) => { if (e.button === 2 && state === 'play' && me && (locked || TEST)) placeItem(me, me.sel); });
+  window.addEventListener('wheel', (e) => { if (state === 'play' && me && (locked || TEST)) cycleSlot(e.deltaY > 0 ? 1 : -1); }, { passive: true });
+  function cycleSlot(dir) { if (me.items.length > 1) me.sel = (me.sel + dir + me.items.length) % me.items.length; }
   document.addEventListener('mousemove', (e) => {
     if (state !== 'play' || !me || !me.alive || (!locked && !TEST)) return;
     const mx = clamp(e.movementX, -250, 250), my = clamp(e.movementY, -250, 250);
@@ -1047,6 +1465,12 @@
     keys[e.code] = true;
     if (state === 'play' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (state === 'play' && e.code === 'KeyR' && me) startReload(me);
+    if (state === 'play' && me) { // defenses: 1/2/3 place that slot, E the highlighted one, Tab moves the highlight
+      const n = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      if (n >= 0) placeItem(me, n);
+      if (e.code === 'KeyE') placeItem(me, me.sel);
+      if (e.code === 'Tab') { e.preventDefault(); cycleSlot(1); }
+    }
     if (state === 'play' && e.code === 'KeyP') pause();
     if (state === 'menu' && e.code === 'Enter') startGame();
   });
@@ -1115,7 +1539,11 @@
   // ---------- HUD ----------
   const hud = $('hud'), hitEl = $('hitmark'), splatEl = $('splat'), feedEl = $('feed'), boardEl = $('board');
   const heartsEl = $('hearts'), ammoN = $('ammoN'), ballsEl = $('balls'), reloadEl = $('reload'), stamEl = $('stam');
-  const deadEl = $('dead');
+  const deadEl = $('dead'), buffsEl = $('buffs'), slotsEl = $('slots');
+  slotsEl.addEventListener('click', (e) => { // touch: tap a carried defense to place it
+    const b = e.target.closest('[data-slot]');
+    if (b && state === 'play' && me) placeItem(me, +b.dataset.slot);
+  });
   let hitAnim = null;
   function hitMarker(kill) {
     hitEl.classList.toggle('kill', kill);
@@ -1129,27 +1557,33 @@
     splatEl.querySelector('.who').textContent = `You splatted ${victim.name}!` + (me.streak >= 3 ? `  🔥 ${me.streak} in a row` : '');
     splatEl.classList.remove('show'); void splatEl.offsetWidth; splatEl.classList.add('show');
   }
-  function hurtFx(shooter, x, z) {
+  function hurtFx(from, color) {
     sfx.hurt();
     const h = $('hurt');
-    h.style.setProperty('--hc', shooter.color);
+    h.style.setProperty('--hc', color);
     h.animate([{ opacity: 0.9 }, { opacity: 0 }], { duration: 600, easing: 'ease-out' });
     // a paint splat on the screen, on the side the shot came from
-    const a = angDiff(me.yaw, Math.atan2(-(shooter.x - me.x), -(shooter.z - me.z)));
+    const a = angDiff(me.yaw, Math.atan2(-(from.x - me.x), -(from.z - me.z)));
     const sx = 50 - Math.sin(a) * 30, sy = 50 - Math.cos(a) * 26;
     const d = document.createElement('div');
-    d.style.cssText = `left:${clamp(sx, 12, 88)}%;top:${clamp(sy, 15, 85)}%;background:${shooter.color};-webkit-mask-image:url(${blobURL});mask-image:url(${blobURL});transform:rotate(${rand(0, 360)}deg)`;
+    d.style.cssText = `left:${clamp(sx, 12, 88)}%;top:${clamp(sy, 15, 85)}%;background:${color};-webkit-mask-image:url(${blobURL});mask-image:url(${blobURL});transform:rotate(${rand(0, 360)}deg)`;
     $('splats').appendChild(d);
     setTimeout(() => d.remove(), 1700);
   }
   const feed = [];
-  function addFeed(killer, victim) {
+  function addFeed(killer, victim, how) {
     const nm = (p) => `<b style="color:${p.color}">${p === me ? 'You' : esc(p.name)}</b>`;
     const el = document.createElement('div');
-    el.innerHTML = `${nm(killer)} <span style="opacity:.8">splatted</span> ${nm(victim)}`;
+    el.innerHTML = `${nm(killer)} <span style="opacity:.8">${how ? how + ' ' : ''}splatted</span> ${nm(victim)}`;
     feedEl.prepend(el);
     feed.unshift({ el, t: now });
     while (feed.length > 5) feed.pop().el.remove();
+  }
+  const toastEl = $('toast');
+  function toast(html, color) {
+    toastEl.innerHTML = html;
+    toastEl.style.setProperty('--tc', color);
+    toastEl.classList.remove('show'); void toastEl.offsetWidth; toastEl.classList.add('show');
   }
   function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function setDeadUI(on, killer) {
@@ -1159,13 +1593,30 @@
   }
   let hudKey = '', boardT = 0;
   function updateHUD(dt) {
-    const key = [me.hp, me.maxHp, me.ammo, me.reload > 0, me.color].join(',');
+    const key = [me.hp, me.maxHp, me.ammo, me.magSize, me.reload > 0, me.color, Object.keys(me.buffs).join(), me.items.join(), me.sel, touchMode].join(',');
     if (key !== hudKey) {
       hudKey = key;
       heartsEl.innerHTML = Array.from({ length: me.maxHp }, (_, i) => `<span class="${i < me.hp ? '' : 'off'}">❤</span>`).join('');
       ammoN.textContent = me.ammo;
-      ballsEl.innerHTML = Array.from({ length: MAG_SIZE }, (_, i) => `<i class="${i < me.ammo ? '' : 'off'}"></i>`).join('');
+      $('ammoM').textContent = me.magSize;
+      ballsEl.innerHTML = Array.from({ length: me.magSize }, (_, i) => `<i class="${i < me.ammo ? '' : 'off'}"></i>`).join('');
       reloadEl.hidden = !(me.reload > 0);
+      // boosts you have, and your 3 defense slots
+      const bs = Object.keys(POWERUPS).filter((k) => !POWERUPS[k].place && (me.buffs[k] || (k === 'heart' && me.maxHp > PLAYER_HP)));
+      buffsEl.innerHTML = bs.map((k) => `<span title="${POWERUPS[k].name}" style="background:${POWERUPS[k].color}">${POWERUPS[k].icon}</span>`).join('');
+      buffsEl.hidden = !bs.length;
+      slotsEl.innerHTML = Array.from({ length: MAX_CARRY }, (_, i) => {
+        const k = me.items[i];
+        if (!k) return `<button class="slot empty" tabindex="-1"><small>${i + 1}</small></button>`;
+        const P = POWERUPS[k];
+        return `<button class="slot${i === me.sel ? ' sel' : ''}" data-slot="${i}" tabindex="-1" style="--ic:${P.color}" aria-label="Place ${P.name}">` +
+          `<span>${P.icon}</span><small>${touchMode ? '' : i + 1}</small><em>${P.name}</em></button>`;
+      }).join('');
+      slotsEl.hidden = !me.items.length;
+      // touch: the slots sit just above the hearts and ammo, however tall those are
+      slotsEl.style.bottom = touchMode && innerWidth > innerHeight ? Math.max($('health').offsetHeight, $('ammo').offsetHeight) + 14 + 'px' : '';
+      const gc = me.buffs.golden ? GOLD : me.color;
+      vm.hopperMat.color.set(gc); vm.flash.material.color.set(gc);
     }
     if (me.reload > 0) reloadEl.querySelector('i').style.width = ((1 - me.reload / RELOAD_TIME) * 100).toFixed(0) + '%';
     stamEl.style.visibility = me.stamina < STAMINA_MAX ? 'visible' : 'hidden';
@@ -1223,6 +1674,27 @@
     mctx.drawImage(mapImg, -(me.x + HALF) * MAP_PX, -(me.z + HALF) * MAP_PX);
     mctx.setTransform(1, 0, 0, 1, 0, 0);
     const cs = Math.cos(me.yaw), sn = Math.sin(me.yaw);
+    const mx = (x, z) => [((x - me.x) * cs - (z - me.z) * sn) * s + W / 2, ((x - me.x) * sn + (z - me.z) * cs) * s + W / 2];
+    for (const d of deploys) {
+      if (d.type === 'mine' && d.owner !== me) continue; // only your own mines show
+      const [x, y] = mx(d.x, d.z);
+      mctx.beginPath();
+      if (d.type === 'wall') {
+        const long = d.w > d.d, h = (long ? d.w : d.d) / 2;
+        const [x0, y0] = mx(d.x - (long ? h : 0), d.z - (long ? 0 : h)), [x1, y1] = mx(d.x + (long ? h : 0), d.z + (long ? 0 : h));
+        mctx.moveTo(x0, y0); mctx.lineTo(x1, y1); mctx.lineWidth = 6; mctx.strokeStyle = '#ffffff'; mctx.stroke();
+        continue;
+      }
+      const r = d.type === 'heal' || d.type === 'dome' || d.type === 'bush' ? DEPLOY[d.type].r * s : 6;
+      mctx.arc(x, y, r, 0, 7);
+      mctx.fillStyle = d.type === 'turret' || d.type === 'mine' ? d.color : POWERUPS[d.type].color + '99';
+      mctx.fill();
+    }
+    for (const d of drops) {
+      const [x, y] = mx(d.x, d.z);
+      mctx.beginPath(); mctx.arc(x, y, 7, 0, 7); mctx.fillStyle = POWERUPS[d.type].color; mctx.fill();
+      mctx.lineWidth = 3; mctx.strokeStyle = '#ffffff'; mctx.stroke();
+    }
     for (const c of chars) {
       if (c === me || !c.alive) continue;
       if (now - (seenOnMap.get(c) || -99) > 1.5) continue;
@@ -1276,6 +1748,7 @@
     const others = COLORS.filter((c) => c !== chosenColor);
     bots.forEach((b, i) => setColor(b, others[i % others.length]));
     clearDecals();
+    clearItems();
     balls.length = 0;
     for (const c of chars) { c.kills = 0; c.deaths = 0; c.streak = 0; c.alive = false; }
     for (const c of chars) spawn(c);
@@ -1382,7 +1855,7 @@
     vm.base.set(clamp(0.62 * depth * tv * aspect, 0.06, 0.17), -0.55 * depth * tv, -depth);
     vm.scale.setScalar((touchMode ? 0.52 : 0.62) * clamp(aspect, 0.55, 1));
   }
-  window.addEventListener('resize', resize);
+  window.addEventListener('resize', () => { resize(); hudKey = ''; });
   resize();
 
   function step(dt) {
@@ -1398,6 +1871,8 @@
       if (!c.alive && (c !== me || state === 'play')) { c.respawn -= dt; if (c.respawn <= 0 && (c !== me || state === 'play')) spawn(c); }
     }
     separate();
+    updateDrops(dt);
+    updateDeploys(dt);
     updateBalls(dt);
     updateParts(dt);
   }
@@ -1424,6 +1899,7 @@
   window.PBW = {
     get state() { return state; }, get me() { return me; }, chars, bots, balls, solids, navPoints, hideZones,
     heightAt, concealed, canSee, keys, input, startGame, pause, resume, step, renderer, hit: hitChar,
+    drops, deploys, spawnDrop, givePowerup, placeItem, fireBall, clearItems, POWERUPS, DEPLOY, MAX_CARRY,
     get decalCount() { return decals.count; },
     look(yaw, pitch) { if (me) { me.yaw = yaw; me.pitch = pitch; } },
     setTouchMode,
