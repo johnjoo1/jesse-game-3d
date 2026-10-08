@@ -9,10 +9,11 @@ Open `index.html` in a browser, or play it on GitHub Pages (see below). Nothing 
 
 - **Computer:** click the game to grab the mouse. WASD/arrows move · mouse looks · click shoots ·
   Shift sprints · Space jumps · R reloads · 1/2/3 or E (or right-click) place a defense · Tab or the mouse
-  wheel picks which one E places · T opens Teams · Esc or P pauses
+  wheel picks which one E places · F builds a block · hold C to duck · T opens Teams · Esc or P pauses
 - **Phone/tablet:** put your left thumb down anywhere on the left side to get a thumbstick (push past the
   edge to run) · drag on the right side to look · hold **FIRE** to shoot (you can drag the FIRE button to aim
-  while shooting) · **JUMP** · ⟳ reloads · tap a carried defense to place it · **II** pauses.
+  while shooting) · **JUMP** · ⟳ reloads · **🧱** builds a block · **DUCK** ducks (tap again to stand) · tap a
+  carried defense to place it · **II** pauses.
   Turn the device sideways for the best view.
 
 The game switches controls based on what you use: touching the screen shows the touch buttons, and using a
@@ -35,6 +36,19 @@ mouse or keyboard hides them.
 - Bots wander, run for cover behind tall walls when they're hurt, chase where they last saw you, and shoot in
   short bursts with wobbly aim. They're on the easy side: they take a moment to react, and they don't shoot
   someone who still has a spawn shield.
+
+## Blocks and ducking
+
+- **Earn blocks:** every splat you make earns you a 1 m block 🧱 (your turret's and mine's splats count too). You
+  keep your blocks when you're splatted; you can carry up to 30. Bots don't build.
+- **Build like in Minecraft:** a green ghost block shows where yours will go (red if someone's standing there). Press
+  **F** (or tap 🧱). Look at the top of a block to stack on it, or at its side to put the next one in front of it.
+  Blocks always sit on whatever is under them, so nothing floats, and towers go up to 7 m. You can jump up onto a
+  block, so stairs work too.
+- **Breaking:** like barricades, any paint wears a block down, yours included: 4 hits break it, and the blocks above
+  drop down. Each player can have 60 blocks standing; building more replaces your oldest.
+- **Ducking:** hold **C** (or tap **DUCK**) to crouch to about 1 m tall, so a single block covers you. You move
+  slowly while ducking and can't sprint; stand up to peek and shoot over. Bots duck when they hide behind cover.
 
 ## Power-ups (Milestone 2)
 

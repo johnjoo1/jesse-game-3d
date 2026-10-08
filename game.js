@@ -11,7 +11,8 @@
 
   // ---------- Tuning (carried over from the top-down game where it maps) ----------
   const ARENA = 100, HALF = ARENA / 2;   // meters
-  const PLAYER_R = 0.45, EYE = 1.5;
+  const PLAYER_R = 0.45, EYE = 1.5, EYE_DUCK = 0.85; // ducking: about 1 m tall, so one block covers you
+  const DUCK_SPEED = 0.45;
   const WALK = 6, SPRINT_MULT = 1.5, STAMINA_MAX = 2;
   const BOT_SPEED = 4.6;
   const GRAVITY = 22, JUMP_V = 7.5, STEP = 0.45; // jump clears about 1.7 m: crates and rocks yes, walls no
@@ -27,6 +28,8 @@
     'Gloop', 'Speckle', 'Dribble', 'Fizz', 'Noodle', 'Puddle', 'Swirl', 'Bonk', 'Wobble', 'Spritz', 'Jelly', 'Blotch', 'Squirt', 'Doodle',
     'Gumdrop', 'Smoosh', 'Pip', 'Kaboom', 'Wiggles', 'Flick'];
 
+  const eyeOf = (c) => c.y + (c.crouch ? EYE_DUCK : EYE);
+  const midOf = (c) => c.y + (c.crouch ? 0.5 : 0.85); // where to aim at someone
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[(Math.random() * arr.length) | 0];
@@ -170,7 +173,7 @@
     for (let k = 0; k < cell.length; k++) {
       const o = cell[k];
       if (x <= o.x0 || x >= o.x1 || z <= o.z0 || z >= o.z1) continue;
-      if (y < (o.ramp ? rampHeight(o, x, z) : o.h)) return o;
+      if (y < (o.ramp ? rampHeight(o, x, z) : o.h) && (o.y0 == null || y >= o.y0 - 0.02)) return o;
     }
     return null;
   }
@@ -427,7 +430,7 @@
     _m4.makeScale(0, 0, 0);
     for (let i = 0; i < decals.count; i++) {
       const x = decalPos[i * 3], y = decalPos[i * 3 + 1], z = decalPos[i * 3 + 2];
-      if (x > o.x0 - 0.05 && x < o.x1 + 0.05 && z > o.z0 - 0.05 && z < o.z1 + 0.05 && y > 0.02 && y < o.h + 0.05) decals.setMatrixAt(i, _m4);
+      if (x > o.x0 - 0.05 && x < o.x1 + 0.05 && z > o.z0 - 0.05 && z < o.z1 + 0.05 && y > Math.max(0.02, (o.y0 || 0) - 0.02) && y < o.h + 0.05) decals.setMatrixAt(i, _m4);
     }
     decals.instanceMatrix.needsUpdate = true;
   }
@@ -537,19 +540,20 @@
     return paintMats.get(color);
   }
   function makeModel(color) {
-    const g = new T.Group();
+    const g = new T.Group(), up = new T.Group(); // up: everything but the feet (squashes when ducking)
+    g.add(up);
     const bodyMat = new T.MeshLambertMaterial({ color });
     const body = new T.Mesh(shared.body, bodyMat);
-    body.scale.set(0.9, 1.25, 0.9); body.position.y = 0.85; g.add(body);
-    const band = new T.Mesh(shared.band, shared.dark); band.position.y = 1.12; band.scale.set(0.98, 1, 0.98); g.add(band);
+    body.scale.set(0.9, 1.25, 0.9); body.position.y = 0.85; up.add(body);
+    const band = new T.Mesh(shared.band, shared.dark); band.position.y = 1.12; band.scale.set(0.98, 1, 0.98); up.add(band);
     for (const sx of [-1, 1]) {
-      const e = new T.Mesh(shared.eye, shared.white); e.position.set(sx * 0.15, 1.13, -0.4); e.scale.z = 0.6; g.add(e);
-      const p = new T.Mesh(shared.pupil, shared.black); p.position.set(sx * 0.15, 1.13, -0.47); g.add(p);
+      const e = new T.Mesh(shared.eye, shared.white); e.position.set(sx * 0.15, 1.13, -0.4); e.scale.z = 0.6; up.add(e);
+      const p = new T.Mesh(shared.pupil, shared.black); p.position.set(sx * 0.15, 1.13, -0.47); up.add(p);
     }
     const feet = [];
     for (const sx of [-1, 1]) { const f = new T.Mesh(shared.foot, shared.dark); f.position.set(sx * 0.18, 0.1, 0); f.scale.set(1, 0.7, 1.4); g.add(f); feet.push(f); }
-    const gun = new T.Mesh(shared.gun, shared.dark); gun.position.set(0.38, 0.75, -0.35); g.add(gun);
-    const hop = new T.Mesh(shared.hopper, bodyMat); hop.position.set(0.38, 0.88, -0.25); g.add(hop);
+    const gun = new T.Mesh(shared.gun, shared.dark); gun.position.set(0.38, 0.75, -0.35); up.add(gun);
+    const hop = new T.Mesh(shared.hopper, bodyMat); hop.position.set(0.38, 0.88, -0.25); up.add(hop);
     const bubble = new T.Mesh(shared.bubble, shared.bubbleMat); bubble.position.y = 0.85; bubble.visible = false; g.add(bubble);
     const spots = new T.Group(); g.add(spots);
     // name tag with health pips
@@ -558,7 +562,7 @@
     tag.scale.set(2, 0.56, 1); tag.position.y = 2.05; g.add(tag);
     scene.add(g);
     const shadow = new T.Mesh(shared.shadow, shared.shadowMat); scene.add(shadow);
-    return { g, body, bodyMat, hop, feet, bubble, spots, tag, tc, shadow, tagKey: '' };
+    return { g, up, body, bodyMat, hop, feet, bubble, spots, tag, tc, shadow, tagKey: '', duckK: 0 };
   }
   function drawTag(p) {
     const ally = me && p !== me && allied(me, p);
@@ -585,7 +589,7 @@
   function makeChar(name, color, isBot, id) {
     const p = {
       id: id || (isBot ? 'b' : 'p') + nextId++, name, color, ownColor: color, isBot, m: makeModel(color),
-      team: null, ss: 0, remote: false, awayUntil: 0, role: 'attack',
+      team: null, ss: 0, remote: false, awayUntil: 0, role: 'attack', blocks: 0, crouch: false,
       x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, onGround: true,
       maxHp: isBot ? BOT_HP : PLAYER_HP, hp: 0, alive: false, respawn: 0, shield: 0, deadT: 0,
       ammo: MAG_SIZE, reload: 0, cooldown: 0, stamina: STAMINA_MAX, kills: 0, deaths: 0, streak: 0,
@@ -658,13 +662,14 @@
       fireBall(p, ox, oy, oz, dx * cs + dz * sn, dy, -dx * sn + dz * cs, golden ? 2 : 1, golden ? GOLD : p.color);
     }
   }
-  function hitsBody(c, x, y, z) { // capsule around the blob body
+  function hitsBody(c, x, y, z) { // capsule around the blob body (shorter when ducking: about 1 m)
     const ex = x - c.x, ez = z - c.z, h2 = ex * ex + ez * ez;
     if (h2 > 1) return false;
+    if (c.crouch) { const dy = y - clamp(y, c.y + 0.4, c.y + 0.5); return h2 + dy * dy < 0.3; }
     const dy = y - clamp(y, c.y + 0.6, c.y + 1.1);
     return h2 + dy * dy < 0.36; // (0.5 + BALL_R)^2
   }
-  function inBubble(c, x, y, z) { const dy = y - (c.y + 0.85); return (x - c.x) ** 2 + dy * dy + (z - c.z) ** 2 < 1.05; }
+  function inBubble(c, x, y, z) { const dy = y - midOf(c); return (x - c.x) ** 2 + dy * dy + (z - c.z) ** 2 < 1.05; }
   function updateBalls(dt) {
     for (let bi = balls.length - 1; bi >= 0; bi--) {
       const b = balls[bi];
@@ -704,6 +709,7 @@
         if (o) {
           // any paint wears a barricade down, its owner's included; turrets only take enemy paint
           if (o.dep && !b.vis && (o.dep.type === 'wall' || !friendly(o.dep.owner, b.owner))) hitDeploy(o.dep);
+          if (o.blk && !b.vis) hitBlock(o.blk); // any paint wears a block down, like a barricade
           if (o.ramp) {
             const top = rampHeight(o, px, pz);
             if (py >= top - 0.05) { // landed on the slope
@@ -756,7 +762,7 @@
   function splatChar(c, killer, src, color = killer.color) {
     c.alive = false; c.respawn = RESPAWN_TIME; c.deadT = 0; c.deaths++; c.streak = 0;
     c.grudge = { id: killer.id, at: now }; // bots won't team up with whoever just splatted them
-    if (killer !== c) { killer.kills++; killer.streak++; }
+    if (killer !== c) { killer.kills++; killer.streak++; earnBlock(killer); }
     fx({ t: 'splat', v: c.id, k: killer.id, x: r2(c.x), y: r2(c.y), z: r2(c.z), gy: r2(heightAt(c.x, c.z, 0)), c: color,
       how: src ? POWERUPS[src.type].icon : '', st: killer.streak });
     if (Math.random() < DROP_CHANCE) spawnDrop(c.x, heightAt(c.x, c.z, 0), c.z); // half of all splats drop something
@@ -1067,7 +1073,7 @@
         for (const o of chars) {
           if (friendly(o, d.owner) || !inPlay(o) || o.shield > 0) continue;
           const dd = Math.hypot(o.x - hx, o.z - hz);
-          if (dd > bestD || (concealed(o) && dd > HIDE_NEAR) || !clearLine(hx, hy, hz, o.x, o.y + 0.9, o.z, dd > HIDE_NEAR)) continue;
+          if (dd > bestD || (concealed(o) && dd > HIDE_NEAR) || !clearLine(hx, hy, hz, o.x, midOf(o), o.z, dd > HIDE_NEAR)) continue;
           best = o; bestD = dd;
         }
         if (best) {
@@ -1077,7 +1083,7 @@
           if (d.cool <= 0 && Math.abs(angDiff(d.yaw, want)) < 0.2) {
             d.cool = cfg.rate;
             const time = bestD / BALL_SPEED, a = d.yaw + rand(-0.06, 0.06);
-            const pitch = Math.atan2(best.y + 0.85 - hy + 0.5 * BALL_GRAVITY * time * time, bestD) + rand(-0.03, 0.03), cp = Math.cos(pitch);
+            const pitch = Math.atan2(midOf(best) - hy + 0.5 * BALL_GRAVITY * time * time, bestD) + rand(-0.03, 0.03), cp = Math.cos(pitch);
             const dx = -Math.sin(a) * cp, dy = Math.sin(pitch), dz = -Math.cos(a) * cp;
             // the turret's paintballs count as its owner's, so its splats go on their score
             fireBall(d.owner, hx + dx * 0.6, hy + dy * 0.6, hz + dz * 0.6, dx, dy, dz, 1, d.color, d);
@@ -1162,9 +1168,160 @@
     }
   }
   function clearItems() {
+    clearBlocks();
     while (drops.length) removeDrop(drops[0]);
     while (deploys.length) removeDeploy(deploys[0], false);
   }
+
+  // ---------- Blocks: build cover like in Minecraft ----------
+  // Every splat you make earns a 1 m block (people only, not bots); you keep them when you're splatted.
+  // Look at a spot and press F (or the 🧱 button): look at the top of something to stack on it, or at its side
+  // to put one next to it. Blocks settle onto whatever is under them, so nothing floats; when one breaks, the
+  // ones above drop down. Like barricades, any paint wears a block down (4 hits).
+  const BLOCK_HP = 4, BLOCKS_PER_SPLAT = 1, MAX_BLOCKS_CARRIED = 30, MAX_BLOCKS_STANDING = 60, MAX_BLOCKS = 400;
+  const BLOCK_REACH = 5, BUILD_TOP = 7; // how far away you can build, and how high (m)
+  const blocks = [];                     // { id, i, j, y0, hp, owner, color, solid, flash }
+  let blockId = 0, blockVer = 0;
+  const blockTex = new T.CanvasTexture(canvasTex(64, (ctx, sz) => { // a toy brick: light face, darker edge
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, sz, sz);
+    ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(0, sz * 0.55, sz, sz * 0.45);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 5; ctx.strokeRect(2.5, 2.5, sz - 5, sz - 5);
+  }));
+  const blockMesh = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5), new T.MeshLambertMaterial({ map: blockTex }), MAX_BLOCKS);
+  blockMesh.frustumCulled = false;
+  for (let i = 0; i < MAX_BLOCKS; i++) blockMesh.setColorAt(i, _c.set(0xffffff));
+  blockMesh.count = 0;
+  scene.add(blockMesh);
+  function drawBlocks() {
+    const c = new T.Color();
+    blocks.forEach((b, k) => {
+      _m4.makeTranslation(b.i, b.y0, b.j);
+      blockMesh.setMatrixAt(k, _m4);
+      c.set(b.color).lerp(_c.set(0xffffff), 0.35);                 // a pastel of its builder's color
+      c.multiplyScalar(0.55 + 0.45 * (b.hp / BLOCK_HP));              // darker as it wears down
+      if (b.flash > 0) c.lerp(_c.set(0xffffff), 0.6);
+      blockMesh.setColorAt(k, c);
+    });
+    blockMesh.count = blocks.length;
+    blockMesh.instanceMatrix.needsUpdate = true;
+    blockMesh.instanceColor.needsUpdate = true;
+  }
+  const blocksIn = (i, j) => blocks.filter((b) => b.i === i && b.j === j).sort((a, b) => a.y0 - b.y0);
+  function addBlock(i, j, y0, owner, color, id = ++blockId, hp = BLOCK_HP) {
+    const b = { id, i, j, y0, hp, owner, color, flash: 0 };
+    b.solid = addSolid({ x0: i, x1: i + 1, z0: j, z1: j + 1, h: y0 + 1, y0, kind: 'block', blk: b });
+    blocks.push(b);
+    blockId = Math.max(blockId, id);
+    blockVer++;
+    drawBlocks();
+    return b;
+  }
+  // a block goes (broken, or replaced by its builder's newest): paint on it goes too, and blocks above drop down
+  function removeBlock(b, broke) {
+    const k = blocks.indexOf(b);
+    if (k < 0) return;
+    blocks.splice(k, 1);
+    removeSolid(b.solid);
+    hideDecalsIn({ x0: b.i, x1: b.i + 1, z0: b.j, z1: b.j + 1, y0: b.y0, h: 99 });
+    if (broke) burst(b.i + 0.5, b.y0 + 0.5, b.j + 0.5, b.color, 24, 4);
+    for (const a of blocksIn(b.i, b.j)) if (a.y0 > b.y0) { a.y0 -= 1; a.solid.y0 = a.y0; a.solid.h = a.y0 + 1; }
+    blockVer++;
+    drawBlocks();
+  }
+  function hitBlock(b) {
+    b.hp--; b.flash = 0.12;
+    if (b.hp <= 0) removeBlock(b, true); else { blockVer++; drawBlocks(); }
+  }
+  function clearBlocks() { while (blocks.length) removeBlock(blocks[blocks.length - 1], false); blockId = 0; }
+  // Where would a block go? Follow your aim until it meets something (up to 5 m): the block goes in the space
+  // just in front of that, settled onto whatever is under it.
+  function blockTarget(p) {
+    const ey = eyeOf(p), cp = Math.cos(p.pitch);
+    const dx = -Math.sin(p.yaw) * cp, dy = Math.sin(p.pitch), dz = -Math.cos(p.yaw) * cp;
+    let px = p.x, pz = p.z;
+    for (let s = 0.1; s <= BLOCK_REACH; s += 0.1) {
+      const x = p.x + dx * s, y = ey + dy * s, z = p.z + dz * s;
+      if (y <= 0 || y < heightAt(x, z, 0)) return blockCell(p, Math.floor(px), Math.floor(pz));
+      px = x; pz = z;
+    }
+    return null;
+  }
+  // can p put a block in column (i, j)? It sits on the highest thing there.
+  function blockCell(p, i, j) {
+    const y0 = heightAt(i + 0.5, j + 0.5, 0.49);
+    let ok = Math.abs(i + 0.5) < HALF - 0.5 && Math.abs(j + 0.5) < HALF - 0.5 && y0 + 1 <= BUILD_TOP;
+    if (ok) for (const c of chars) { // not inside anyone (you included)
+      if (!inPlay(c)) continue;
+      const nx = clamp(c.x, i, i + 1), nz = clamp(c.z, j, j + 1);
+      if ((c.x - nx) ** 2 + (c.z - nz) ** 2 < PLAYER_R * PLAYER_R && c.y < y0 + 1 && c.y + 1.6 > y0) { ok = false; break; }
+    }
+    return { i, j, y0, ok };
+  }
+  // the host (or a solo game) puts the block down
+  function placeBlock(p, i, j) {
+    if (!p || !inPlay(p) || !(p.blocks > 0) || !Number.isInteger(i) || !Number.isInteger(j)) return false;
+    if (Math.hypot(i + 0.5 - p.x, j + 0.5 - p.z) > BLOCK_REACH + 2) return false;
+    const t = blockCell(p, i, j);
+    if (!t.ok) return false;
+    const mine = blocks.filter((b) => b.owner === p);
+    if (mine.length >= MAX_BLOCKS_STANDING) removeBlock(mine[0], true); // your oldest goes
+    if (blocks.length >= MAX_BLOCKS) return false;
+    addBlock(i, j, t.y0, p, p.color);
+    p.blocks--;
+    fx({ t: 'block', p: p.id, x: i + 0.5, y: t.y0, z: j + 0.5 });
+    return true;
+  }
+  function earnBlock(p) { // a splat earns a block
+    if (p.isBot) return;
+    p.blocks = Math.min(MAX_BLOCKS_CARRIED, (p.blocks || 0) + BLOCKS_PER_SPLAT);
+    fx({ t: 'gotblock', p: p.id, n: p.blocks });
+  }
+  function updateBlocks(dt) {
+    let dirty = false;
+    for (const b of blocks) if (b.flash > 0) { b.flash -= dt; dirty = true; }
+    if (dirty) drawBlocks();
+  }
+  // the ghost block that shows where yours would go
+  const ghost = new T.Group();
+  {
+    const geo = new T.BoxGeometry(1.02, 1.02, 1.02).translate(0.5, 0.5, 0.5);
+    ghost.fill = new T.Mesh(geo, new T.MeshBasicMaterial({ color: 0x3dff8b, transparent: true, opacity: 0.22, depthWrite: false }));
+    ghost.edges = new T.LineSegments(new T.EdgesGeometry(geo), new T.LineBasicMaterial({ color: 0xffffff }));
+    ghost.add(ghost.fill, ghost.edges);
+    ghost.visible = false;
+    scene.add(ghost);
+  }
+  let myTarget = null;
+  function updateGhost() {
+    myTarget = me && inPlay(me) && state === 'play' && me.blocks > 0 && brain.state === 'off' ? blockTarget(me) : null;
+    ghost.visible = !!myTarget;
+    if (!myTarget) return;
+    ghost.position.set(myTarget.i - 0.01, myTarget.y0 - 0.01, myTarget.j - 0.01);
+    ghost.fill.material.color.set(myTarget.ok ? 0x3dff8b : 0xff4d4d);
+    ghost.edges.material.color.set(myTarget.ok ? 0xffffff : 0xff9a9a);
+  }
+  // F or the 🧱 button: right away, or (a friend's game) by asking the host
+  function useBlock() {
+    if (!me || !inPlay(me) || !(me.blocks > 0)) return;
+    const t = myTarget || blockTarget(me);
+    if (!t || !t.ok) { if (t) sfx.empty(); return; }
+    if (mode === 'client') clientOut.blocks.push([t.i, t.j]);
+    else placeBlock(me, t.i, t.j);
+  }
+  // friends' screens: the host's list of blocks
+  function syncBlocks(list) {
+    const ids = new Set(list.map((a) => a[0]));
+    for (const b of blocks.slice()) if (!ids.has(b.id)) removeBlock(b, true);
+    let changed = false;
+    for (const [id, i, j, y0, hp, ownerId, color] of list) {
+      const b = blocks.find((q) => q.id === id);
+      if (!b) { addBlock(i, j, y0, byId(ownerId) || nobody(ownerId), color, id, hp); continue; }
+      if (b.y0 !== y0) { b.y0 = y0; b.solid.y0 = y0; b.solid.h = y0 + 1; changed = true; }
+      if (b.hp !== hp) { if (hp < b.hp) b.flash = 0.12; b.hp = hp; changed = true; }
+    }
+    if (changed) drawBlocks();
+  }
+  const blockList = () => blocks.map((b) => [b.id, b.i, b.j, r2(b.y0), b.hp, b.owner.id, b.color]);
 
   // ---------- Bots ----------
   function botHurt(b, shooter) {
@@ -1182,8 +1339,9 @@
     const d = Math.hypot(o.x - b.x, o.z - b.z);
     if (d > SIGHT) return false;
     if (d > HIDE_NEAR && concealed(o)) return false;
-    return clearLine(b.x, b.y + EYE, b.z, o.x, o.y + 1.25, o.z, d > HIDE_NEAR) ||
-      clearLine(b.x, b.y + EYE, b.z, o.x, o.y + 0.6, o.z, d > HIDE_NEAR);
+    const hi = o.crouch ? 0.8 : 1.25, lo = o.crouch ? 0.35 : 0.6; // the top of their head and their middle
+    return clearLine(b.x, eyeOf(b), b.z, o.x, o.y + hi, o.z, d > HIDE_NEAR) ||
+      clearLine(b.x, eyeOf(b), b.z, o.x, o.y + lo, o.z, d > HIDE_NEAR);
   }
   function botPerceive(b) {
     let best = null, bestScore = Infinity;
@@ -1281,11 +1439,12 @@
     if (b.reload > 0) { b.reload -= dt; if (b.reload <= 0) b.ammo = b.magSize; }
     const BS = BOT_SPEED * (b.buffs.speed ? 1.3 : 1);
     let mx = 0, mz = 0, speed = BS, faceYaw = null;
+    b.crouch = false;
     const t = b.target && b.target.alive ? b.target : null;
     if (b.mode === 'cover' && b.cover) {
       const dx = b.cover.x - b.x, dz = b.cover.z - b.z, d = Math.hypot(dx, dz);
       if (d > 0.8) { [mx, mz] = steer(b, dx, dz); speed = BS * 1.2; }
-      else { b.coverT -= dt; if (b.ammo < b.magSize) startReload(b); }
+      else { b.coverT -= dt; b.crouch = true; if (b.ammo < b.magSize) startReload(b); } // duck down behind it
       b.coverMax -= dt;
       if (b.coverT <= 0 || b.coverMax <= 0) { b.mode = t ? 'fight' : 'wander'; b.cover = null; }
       if (t) faceYaw = Math.atan2(-(t.x - b.x), -(t.z - b.z));
@@ -1335,8 +1494,8 @@
     }
   }
   function botShoot(b, t) {
-    const ox = b.x, oy = b.y + 1.0, oz = b.z;
-    const tx = t.x, ty = t.y + (t.aimH || 0.85), tz = t.z;
+    const ox = b.x, oy = b.y + (b.crouch ? 0.6 : 1.0), oz = b.z;
+    const tx = t.x, ty = t.aimH ? t.y + t.aimH : midOf(t), tz = t.z;
     const d = Math.hypot(tx - ox, tz - oz), time = d / BALL_SPEED;
     let yaw = Math.atan2(-(tx - ox), -(tz - oz));
     let pitch = Math.atan2(ty - oy + 0.5 * BALL_GRAVITY * time * time, d);
@@ -1380,7 +1539,7 @@
   function shootMe() {
     if (!canShoot(me)) { if (me.ammo <= 0) startReload(me); return; }
     // aim at whatever is under the crosshair, starting from the gun barrel
-    const cp = Math.cos(me.pitch), ex = me.x, ey = me.y + EYE, ez = me.z;
+    const cp = Math.cos(me.pitch), ex = me.x, ey = eyeOf(me), ez = me.z;
     let dx = -Math.sin(me.yaw) * cp, dy = Math.sin(me.pitch), dz = -Math.cos(me.yaw) * cp;
     if (touchMode) [dx, dy, dz] = aimAssist(ex, ey, ez, dx, dy, dz);
     let dist = 60;
@@ -1415,11 +1574,11 @@
     let best = null, bestA = 0.06;
     for (const c of chars) {
       if (c === me || !c.alive) continue;
-      const tx = c.x - ex, ty = c.y + 0.85 - ey, tz = c.z - ez;
+      const tx = c.x - ex, ty = midOf(c) - ey, tz = c.z - ez;
       const d = Math.hypot(tx, ty, tz);
       if (d > 35) continue;
       const a = Math.acos(clamp((tx * dx + ty * dy + tz * dz) / d, -1, 1));
-      if (a < bestA && !friendly(me, c) && !(concealed(c) && d > HIDE_NEAR) && clearLine(ex, ey, ez, c.x, c.y + 0.85, c.z, false)) { bestA = a; best = [tx / d, ty / d, tz / d]; }
+      if (a < bestA && !friendly(me, c) && !(concealed(c) && d > HIDE_NEAR) && clearLine(ex, ey, ez, c.x, midOf(c), c.z, false)) { bestA = a; best = [tx / d, ty / d, tz / d]; }
     }
     if (!best) return [dx, dy, dz];
     const k = 0.6, x = dx + (best[0] - dx) * k, y = dy + (best[1] - dy) * k, z = dz + (best[2] - dz) * k, l = Math.hypot(x, y, z);
@@ -1437,8 +1596,9 @@
     fwd += -input.stickY; side += input.stickX;
     const mag = Math.hypot(fwd, side);
     if (mag > 1) { fwd /= mag; side /= mag; }
-    const sprintWanted = (keys.ShiftLeft || keys.ShiftRight || input.sprintTouch) && fwd > 0.3;
-    let speed = WALK * (me.buffs.speed ? 1.3 : 1);
+    me.crouch = !!(keys.KeyC || input.duck);
+    const sprintWanted = (keys.ShiftLeft || keys.ShiftRight || input.sprintTouch) && fwd > 0.3 && !me.crouch;
+    let speed = WALK * (me.buffs.speed ? 1.3 : 1) * (me.crouch ? DUCK_SPEED : 1);
     if (sprintWanted && me.stamina > 0) { speed *= SPRINT_MULT; me.stamina = Math.max(0, me.stamina - dt); me.sprintLock = 0.6; }
     else { me.sprintLock = (me.sprintLock || 0) - dt; if (me.sprintLock <= 0) me.stamina = Math.min(STAMINA_MAX, me.stamina + dt * 0.6); }
     if (concealed(me)) speed *= 0.85;
@@ -1504,6 +1664,7 @@
       const n = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
       if (n >= 0) useSlot(n);
       if (e.code === 'KeyE') useSlot(me.sel);
+      if (e.code === 'KeyF') useBlock();
       if (e.code === 'Tab') { e.preventDefault(); cycleSlot(1); }
     }
     if (state === 'play' && e.code === 'KeyP' && !panelOpen) pause();
@@ -1532,6 +1693,8 @@
       if (kind === 'fire') input.fire = true;
       if (kind === 'jump') input.jump = true;
       if (kind === 'reload' && me) startReload(me);
+      if (kind === 'block') useBlock();
+      if (kind === 'duck') { input.duck = !input.duck; btn.classList.toggle('lit', input.duck); }
     }
   }
   function touchMove(e) {
@@ -1570,7 +1733,8 @@
   touchEl.addEventListener('touchend', touchEnd);
   touchEl.addEventListener('touchcancel', touchEnd);
   function clearTouches() {
-    touches.clear(); input.fire = input.jump = input.sprintTouch = false; input.stickX = input.stickY = 0; stickEl.hidden = true;
+    touches.clear(); input.fire = input.jump = input.sprintTouch = input.duck = false;
+    $('tDuck').classList.remove('lit'); input.stickX = input.stickY = 0; stickEl.hidden = true;
     document.querySelectorAll('.tb.on').forEach((b) => b.classList.remove('on'));
   }
 
@@ -1640,7 +1804,7 @@
   }
   let hudKey = '', boardT = 0;
   function updateHUD(dt) {
-    const key = [me.hp, me.maxHp, me.ammo, me.magSize, me.reload > 0, me.color, Object.keys(me.buffs).join(), me.items.join(), me.sel, touchMode, mode, teamMode].join(',');
+    const key = [me.blocks, me.hp, me.maxHp, me.ammo, me.magSize, me.reload > 0, me.color, Object.keys(me.buffs).join(), me.items.join(), me.sel, touchMode, mode, teamMode].join(',');
     if (key !== hudKey) {
       hudKey = key;
       heartsEl.innerHTML = Array.from({ length: me.maxHp }, (_, i) => `<span class="${i < me.hp ? '' : 'off'}">❤</span>`).join('');
@@ -1664,6 +1828,11 @@
       slotsEl.style.bottom = touchMode && innerWidth > innerHeight ? Math.max($('health').offsetHeight, $('ammo').offsetHeight) + 14 + 'px' : '';
       const gc = me.buffs.golden ? GOLD : me.color;
       vm.hopperMat.color.set(gc); vm.flash.material.color.set(gc);
+      const nb = me.blocks || 0;
+      $('blocksHud').hidden = !nb || touchMode;
+      $('blocksN').textContent = nb;
+      $('tBlock').innerHTML = `🧱<small>${nb}</small>`;
+      $('tBlock').classList.toggle('none', !nb);
       $('teamBtn').innerHTML = (teamMode ? '👥 Teams' : '🤝 Team up') + (touchMode ? '' : ' <span class="key">T</span>');
     }
     if (me.reload > 0) reloadEl.querySelector('i').style.width = ((1 - me.reload / RELOAD_TIME) * 100).toFixed(0) + '%';
@@ -1872,7 +2041,7 @@
     clearItems();
     balls.length = 0;
     alliances = {}; requests = {}; botAnswers = {};
-    for (const c of chars) { c.kills = 0; c.deaths = 0; c.streak = 0; c.alive = false; }
+    for (const c of chars) { c.kills = 0; c.deaths = 0; c.streak = 0; c.alive = false; c.blocks = 0; }
     for (const c of chars) spawn(c);
     feed.length = 0; feedEl.innerHTML = '';
     enterPlay();
@@ -1925,6 +2094,17 @@
       burst(e.x, e.y, e.z, e.c, 12, 3.5);
       if (e.k === myId && !e.dead) { hitMarker(false); sfx.hit(); }
       if (e.v === myId) hurtFx({ x: e.fx, z: e.fz }, e.c);
+    } else if (e.t === 'block') {
+      burst(e.x, e.y + 0.5, e.z, '#ffffff', 6, 1.5);
+      if (e.p === myId) { sfx.place(0.7); hudKey = ''; }
+      else if (me && me.alive && state !== 'menu' && Math.hypot(e.x - me.x, e.z - me.z) < 20) sfx.place(0.3);
+    } else if (e.t === 'gotblock') {
+      if (e.p !== myId) return;
+      hudKey = '';
+      const n = $('blockPop');
+      n.textContent = '+1 🧱';
+      n.classList.remove('show'); void n.offsetWidth; n.classList.add('show');
+      if (e.n === 1 && !brain.blockTip) { brain.blockTip = 1; toast(`<b>🧱 You earned a block!</b> ${touchMode ? 'Tap 🧱' : 'Press F'} to build where the green box shows · ${touchMode ? 'DUCK' : 'hold C'} to duck behind it`, '#ffd23d'); }
     } else if (e.t === 'pop') {
       burst(e.x, e.y, e.z, '#bff6ff', 8, 3);
     } else if (e.t === 'splat') {
@@ -2204,8 +2384,8 @@
   let mode = 'solo';                  // solo | host | client
   let peer = null, conns = [], hostConn = null, roomCode = '', connecting = false;
   let lobby = null, clientLobby = null, totalPlayers = NUM_BOTS + 1, myLobbyId = null;
-  let snapT = 0, rosterT = 0, sendT = 0, lastSnap = 0, netGen = 0;
-  const clientOut = { shots: [], uses: [] };
+  let snapT = 0, rosterT = 0, sendT = 0, lastSnap = 0, netGen = 0, sentBlockVer = -1;
+  const clientOut = { shots: [], uses: [], blocks: [] };
   const netMsgEl = $('netmsg');
   const netMsg = (t) => { netMsgEl.textContent = t; };
   const cleanName = (n) => String(n || '').replace(/[^\p{L}\p{N} _.'-]/gu, '').trim().slice(0, 12) || 'Friend';
@@ -2352,7 +2532,8 @@
       const lim = HALF - PLAYER_R;
       p.x = clamp(num(m.x, p.x), -lim, lim); p.y = clamp(num(m.y, p.y), 0, 30); p.z = clamp(num(m.z, p.z), -lim, lim);
       p.yaw = num(m.yaw, p.yaw); p.pitch = clamp(num(m.pitch, p.pitch), -1.5, 1.5);
-      p.vx = num(m.vx); p.vz = num(m.vz); p.onGround = !!m.og;
+      p.vx = num(m.vx); p.vz = num(m.vz); p.onGround = !!m.og; p.crouch = !!m.cr;
+      if (Array.isArray(m.blk)) for (const a of m.blk.slice(0, 4)) if (Array.isArray(a)) placeBlock(p, a[0], a[1]);
       if (Array.isArray(m.shots)) for (const s of m.shots.slice(0, 6)) {
         if (!Array.isArray(s) || s.length !== 6 || !s.every(Number.isFinite)) continue;
         launch(p, ...s);
@@ -2457,13 +2638,14 @@
       t: 's', tm: teamMode, go: gameOver == null ? -1 : gameOver,
       p: chars.map((c) => [c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.yaw), r2(c.pitch), c.hp, c.maxHp, c.alive ? 1 : 0, r2(c.shield),
         c.kills, c.deaths, c.ss, Object.keys(c.buffs).join(','), c.magSize, c.items.join(','), c.team == null ? -1 : c.team,
-        r2(c.vx), r2(c.vz), r2(c.respawn), c.awayUntil ? 1 : 0, c.streak]),
+        r2(c.vx), r2(c.vz), r2(c.respawn), c.awayUntil ? 1 : 0, c.streak, c.blocks || 0, c.crouch ? 1 : 0]),
       d: drops.map((d) => [d.id, d.type, r2(d.x), r2(d.y), r2(d.z), r2(d.ttl)]),
       dp: deploys.map((d) => [d.id, d.type, d.owner.id, d.color, r2(d.x), r2(d.y), r2(d.z), r2(d.yaw), d.w || 0, d.d || 0, r2(d.ttl), d.hp, r2(d.cool)]),
       bs: bases.map((b) => [b.alive ? 1 : 0, b.capTeam == null ? -1 : b.capTeam, r2(b.cap)]),
       al: Object.entries(alliances).map(([k, v]) => [k, r2(v.breakT)]), rq: Object.keys(requests),
       fx: outbox,
     };
+    if (rosterT <= 0 || blockVer !== sentBlockVer) { sentBlockVer = blockVer; msg.bk = blockList(); } // blocks, when they change (and now and then)
     if (rosterT <= 0) { rosterT = 1; msg.r = chars.map((c) => [c.id, c.name, c.color, c.isBot ? 1 : 0]); } // names and colors, now and then
     outbox = [];
     for (const c of conns) if (c.player) { try { c.send(msg); } catch (e) { /* dropped */ } }
@@ -2709,12 +2891,13 @@
     }
     const seen = new Set();
     for (const a of m.p) {
-      const [id, x, y, z, yaw, pitch, hp, maxHp, alive, shield, kills, deaths, ss, buffs, magSize, items, team, vx, vz, respawn, away, streak] = a;
+      const [id, x, y, z, yaw, pitch, hp, maxHp, alive, shield, kills, deaths, ss, buffs, magSize, items, team, vx, vz, respawn, away, streak, nblocks, crouch] = a;
       const c = byId(id);
       if (!c) continue; // its name arrives with the next roster
       seen.add(c);
       const wasAlive = c.alive;
-      Object.assign(c, { hp, maxHp, shield, kills, deaths, respawn, away: !!away, streak, team: team < 0 ? null : team });
+      Object.assign(c, { hp, maxHp, shield, kills, deaths, respawn, away: !!away, streak, team: team < 0 ? null : team, blocks: nblocks || 0 });
+      if (c !== me) c.crouch = !!crouch;
       c.buffs = {}; for (const k of String(buffs).split(',')) if (k && POWERUPS[k]) c.buffs[k] = 1;
       c.items = String(items).split(',').filter((k) => DEPLOY[k]).slice(0, MAX_CARRY);
       c.sel = clamp(c.sel, 0, Math.max(0, c.items.length - 1));
@@ -2736,6 +2919,7 @@
     for (const c of chars.slice()) if (!seen.has(c) && c.id !== clientWaitId) { if (c === me) me = null; removeChar(c); }
     if (!me && clientWaitId) { const c = byId(clientWaitId); if (c) { me = c; c.ss = -1; enterPlay(); } }
     if (Array.isArray(m.d)) syncDrops(m.d);
+    if (Array.isArray(m.bk)) syncBlocks(m.bk);
     if (Array.isArray(m.dp)) syncDeploys(m.dp);
     if (Array.isArray(m.bs) && m.bs.length === bases.length) m.bs.forEach(([alive, capTeam, cap], i) => Object.assign(bases[i], { alive: !!alive, capTeam: capTeam < 0 ? null : capTeam, cap }));
     if (Array.isArray(m.al)) { alliances = {}; for (const [k, breakT] of m.al) alliances[k] = { breakT }; }
@@ -2781,13 +2965,14 @@
       c.onGround = true;
     }
     for (const d of drops) { d.ttl -= dt; animateDrop(d, dt); }
+    updateBlocks(dt);
     for (const d of deploys) { if (DEPLOY[d.type].ttl) d.ttl -= dt; d.flash = Math.max(0, d.flash - dt); animateDeploy(d, dt); }
     updateBalls(dt);
     updateParts(dt);
     sendT -= dt;
     if (sendT <= 0) {
       sendT = 1 / 30;
-      sendHost({ t: 'in', ss: me.ss, ask: brain.state !== 'off' ? 1 : 0, x: r2(me.x), y: r2(me.y), z: r2(me.z), yaw: r2(me.yaw), pitch: r2(me.pitch), vx: r2(me.vx), vz: r2(me.vz), og: me.onGround ? 1 : 0,
+      sendHost({ t: 'in', ss: me.ss, ask: brain.state !== 'off' ? 1 : 0, x: r2(me.x), y: r2(me.y), z: r2(me.z), yaw: r2(me.yaw), pitch: r2(me.pitch), vx: r2(me.vx), vz: r2(me.vz), og: me.onGround ? 1 : 0, cr: me.crouch ? 1 : 0, blk: clientOut.blocks.splice(0),
         shots: clientOut.shots.splice(0), uses: clientOut.uses.splice(0) });
     }
   }
@@ -3126,7 +3311,7 @@
     catch (e) { try { save.decals = null; sessionStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e2) { /* can't save */ } }
   }
   const CHAR_FIELDS = ['id', 'name', 'color', 'ownColor', 'isBot', 'remote', 'team', 'role', 'ss', 'x', 'y', 'z', 'yaw', 'pitch', 'hp', 'maxHp',
-    'alive', 'respawn', 'shield', 'kills', 'deaths', 'streak', 'ammo', 'magSize', 'reload', 'buffs', 'items', 'sel', 'stamina', 'awayUntil', 'brainDeath'];
+    'alive', 'respawn', 'shield', 'kills', 'deaths', 'streak', 'ammo', 'magSize', 'reload', 'buffs', 'items', 'sel', 'stamina', 'awayUntil', 'brainDeath', 'blocks', 'crouch'];
   function decalData() { // paint stays where it was
     const out = [], m = new T.Matrix4(), c = new T.Color();
     for (let i = 0; i < decals.count; i++) {
@@ -3157,7 +3342,7 @@
       chars: chars.map((c) => Object.fromEntries(CHAR_FIELDS.map((k) => [k, c[k]]))),
       drops: drops.map((d) => [d.id, d.type, d.x, d.y, d.z, d.ttl]),
       deploys: deploys.map((d) => ({ id: d.id, type: d.type, owner: d.owner.id, color: d.color, x: d.x, y: d.y, z: d.z, yaw: d.yaw, w: d.w, d: d.d, ttl: d.ttl, hp: d.hp, cool: d.cool })),
-      alliances, requests, decals: decalData() };
+      alliances, requests, decals: decalData(), blocks: blockList() };
   }
   function saveAndReload() {
     saveState(serializeGame());
@@ -3207,6 +3392,7 @@
       for (const [id, type, x, y, z, ttl] of sv.drops || []) { const d = spawnDrop(x, y, z, type); d.id = id; d.ttl = ttl; }
       for (const o of sv.deploys || []) { const owner = byId(o.owner); if (owner && DEPLOY[o.type]) registerDeploy({ ...o, owner, flash: 0, alive: true, shield: 0, vx: 0, vz: 0, aimH: 0.75 }); }
       alliances = sv.alliances || {}; requests = sv.requests || {};
+      for (const [id, i, j, y0, hp, ownerId, color] of sv.blocks || []) addBlock(i, j, y0, byId(ownerId) || nobody(ownerId), color, id, hp);
       restoreDecals(sv.decals);
       if (mode === 'host') {
         // friends are reloading too: keep their players safe and waiting for 90 seconds
@@ -3255,6 +3441,10 @@
       m.g.rotation.z = Math.sin(c.walkT) * 0.05 * Math.min(1, speed / 3);
       m.feet[0].position.z = Math.sin(c.walkT) * 0.18 * Math.min(1, speed / 3);
       m.feet[1].position.z = -m.feet[0].position.z;
+      m.duckK += ((c.crouch ? 1 : 0) - m.duckK) * Math.min(1, dt * 12); // ducking: squash down to about 1 m
+      m.up.scale.y = 1 - 0.34 * m.duckK;
+      m.tag.position.y = 2.05 - 0.75 * m.duckK;
+      m.bubble.position.y = 0.85 - 0.3 * m.duckK;
       m.bubble.visible = c.shield > 0;
       if (c.shield > 0) shared.bubbleMat.opacity = 0.18 + Math.sin(now * 8) * 0.07;
       m.shadow.position.set(c.x, heightAt(c.x, c.z, 0) + 0.02, c.z);
@@ -3285,7 +3475,8 @@
       const speed = Math.hypot(me.vx, me.vz);
       bobT += dt * speed * 1.7;
       const bob = me.onGround ? Math.sin(bobT) * 0.04 * Math.min(1, speed / WALK) : 0;
-      camera.position.set(me.x, me.y + EYE + bob, me.z);
+      me.eyeH = me.eyeH == null ? EYE : me.eyeH + ((me.crouch ? EYE_DUCK : EYE) - me.eyeH) * Math.min(1, dt * 14);
+      camera.position.set(me.x, me.y + me.eyeH + bob, me.z);
       camera.rotation.set(me.pitch, me.yaw, 0);
     } else { // float up and look down at the splat
       const k = clamp(me.deadT / 0.8, 0, 1);
@@ -3339,6 +3530,7 @@
     separate();
     updateDrops(dt);
     updateDeploys(dt);
+    updateBlocks(dt);
     updateTeams(dt);
     updateBases(dt);
     updateBalls(dt);
@@ -3354,6 +3546,7 @@
     if (state !== 'pause' || mode !== 'solo') step(dt);
     updateModels(dt);
     updateBaseVisuals();
+    updateGhost();
     updateCamera(dt);
     renderer.info.reset();
     renderer.clear();
@@ -3374,7 +3567,8 @@
     drops, deploys, spawnDrop, givePowerup, placeItem, fireBall, clearItems, POWERUPS, DEPLOY, MAX_CARRY,
     get decalCount() { return decals.count; },
     look(yaw, pitch) { if (me) { me.yaw = yaw; me.pitch = pitch; } },
-    setTouchMode, brain, BrainBank: window.BrainBank, setLearnMode, setAge,
+    setTouchMode, hitsBody, blocks, placeBlock, blockTarget, useBlock, earnBlock, get blockTargetNow() { return myTarget; },
+    brain, BrainBank: window.BrainBank, setLearnMode, setAge,
     get learnMode() { return learnMode; }, get brainAge() { return brainAge; },
     update: { check: checkForUpdate, get ready() { return updateReady; }, get version() { return pageVersion; } },
     get mode() { return mode; }, get teamMode() { return teamMode; }, get bases() { return bases; }, get gameOver() { return gameOver; },

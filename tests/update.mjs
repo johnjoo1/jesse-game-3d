@@ -30,7 +30,8 @@ console.log('Updating a solo game');
     for (let i = 0; i < 60; i++) PBW.step(1 / 60);
     PBW.placeItem(me, 1); // the barricade
     PBW.spawnDrop(me.x + 4, 0, me.z + 4, 'golden');
-    return { x: me.x, z: me.z, kills: me.kills, paint: PBW.decalCount, deploys: PBW.deploys.map((d) => d.type).join(), drops: PBW.drops.length, items: me.items.join(), bots: PBW.bots.map((b) => b.name).join() };
+    me.blocks = 5; PBW.placeBlock(me, Math.floor(me.x) + 2, Math.floor(me.z) + 2); PBW.placeBlock(me, Math.floor(me.x) + 2, Math.floor(me.z) + 2);
+    return { blocks: PBW.blocks.map((b) => [b.i, b.j, b.y0].join(':')).join(), carried: me.blocks, x: me.x, z: me.z, kills: me.kills, paint: PBW.decalCount, deploys: PBW.deploys.map((d) => d.type).join(), drops: PBW.drops.length, items: me.items.join(), bots: PBW.bots.map((b) => b.name).join() };
   });
   bump();
   const found = await t.page.evaluate(() => PBW.update.check());
@@ -42,12 +43,13 @@ console.log('Updating a solo game');
   await reloaded(t);
   const after = await t.page.evaluate(() => {
     const me = PBW.me;
-    return { x: me.x, z: me.z, kills: me.kills, paint: PBW.decalCount, deploys: PBW.deploys.map((d) => d.type).join(), drops: PBW.drops.length, items: me.items.join(),
+    return { blocks: PBW.blocks.map((b) => [b.i, b.j, b.y0].join(':')).join(), carried: me.blocks, x: me.x, z: me.z, kills: me.kills, paint: PBW.decalCount, deploys: PBW.deploys.map((d) => d.type).join(), drops: PBW.drops.length, items: me.items.join(),
       rapid: !!me.buffs.rapid, bots: PBW.bots.map((b) => b.name).join(), note: document.getElementById('feed').textContent };
   });
   check(Math.hypot(after.x - before.x, after.z - before.z) < 0.5 && after.kills === 4, `you're back where you were with your score (${after.kills} splats)`);
   check(after.rapid && after.items === before.items, `boosts and carried defenses come back (${after.items})`);
   check(after.deploys === before.deploys && after.drops === before.drops && after.bots === before.bots, `placed defenses, drops and the same bots come back (${after.deploys})`);
+  check(after.blocks === before.blocks && after.carried === 3 && before.blocks.split(',').length === 2, `your blocks stay built, and you keep the ones you carry (${after.carried} 🧱)`);
   check(after.paint === before.paint && after.paint > 0, `the paint stays where it was (${after.paint} splats)`);
   check(/Updated/.test(after.note), 'a note says "Updated! Your game was saved."');
   check(await t.page.evaluate(() => PBW.update.ready === false && document.getElementById('update').hidden), 'and the button is gone (this is the newest version)');

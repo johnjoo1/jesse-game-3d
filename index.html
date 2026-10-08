@@ -174,6 +174,16 @@
     background: color-mix(in srgb, var(--me, #ff3d7f) 70%, transparent); }
   #tJump { right: calc(4% + 116px); bottom: 7%; width: 70px; height: 70px; font-size: 15px; }
   #tReload { right: calc(4% + 14px); bottom: calc(12% + 118px); width: 64px; height: 64px; font-size: 26px; }
+  #tDuck { right: calc(4% + 196px); bottom: 7%; width: 64px; height: 64px; font-size: 13px; }
+  #tDuck.lit { background: rgba(255, 210, 61, .75); color: #1c2230; text-shadow: none; }
+  #tBlock { right: calc(4% + 120px); bottom: calc(7% + 84px); width: 64px; height: 64px; font-size: 26px; flex-direction: column; line-height: 1; }
+  #tBlock small { font-size: 13px; margin-top: 2px; }
+  #tBlock.none { opacity: .35; }
+  #blocksHud { position: absolute; left: 16px; bottom: 100px; font-size: 18px; font-weight: 900; padding: 6px 12px; }
+  #blocksHud small { font-size: 13px; font-weight: 700; opacity: .85; margin-left: 6px; }
+  #blockPop { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #ffd23d; opacity: 0; }
+  #blockPop.show { animation: bpopup 1.2s ease-out forwards; }
+  @keyframes bpopup { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -24px); } }
 
   /* touch: hearts and ammo side by side at the bottom middle, between the thumbs */
   body.touch #health { left: auto; right: calc(50% + 4px); bottom: 10px; align-items: center; padding: 6px 10px; }
@@ -209,14 +219,19 @@
     #tFire { width: 90px; height: 90px; }
     #tJump { right: calc(4% + 100px); width: 62px; height: 62px; }
     #tReload { bottom: calc(12% + 100px); width: 56px; height: 56px; }
+    #tDuck { right: calc(4% + 170px); width: 56px; height: 56px; }
+    #tBlock { right: calc(4% + 103px); bottom: calc(7% + 70px); width: 56px; height: 56px; font-size: 22px; }
   }
   @media (orientation: portrait) {
-    body.touch #slots { left: auto; right: 4%; transform: none; bottom: calc(12% + 312px); }
+    body.touch #hud #teamBtn { left: 16px; top: 136px; } /* (portrait: under the leaderboard, clear of the minimap) */
+    body.touch #slots { left: auto; right: 4%; transform: none; bottom: calc(12% + 388px); }
   }
   @media (orientation: portrait) { /* narrow screens: stack the buttons up the right edge */
     #tFire { bottom: calc(12% + 110px); }
     #tJump { right: calc(4% + 17px); bottom: calc(12% + 226px); }
     #tReload { right: calc(4% + 96px); bottom: calc(12% + 236px); }
+    #tBlock { right: calc(4% + 17px); bottom: calc(12% + 304px); }
+    #tDuck { right: calc(4% + 96px); bottom: calc(12% + 312px); }
   }
   @media (max-width: 520px) {
     #board .r .nm { max-width: 80px; }
@@ -355,6 +370,8 @@
   <button class="tb" id="tReload" data-t="reload" aria-label="Reload">⟳</button>
   <button class="tb" id="tJump" data-t="jump">JUMP</button>
   <button class="tb" id="tFire" data-t="fire">FIRE</button>
+  <button class="tb" id="tBlock" data-t="block" aria-label="Place a block">🧱<small>0</small></button>
+  <button class="tb" id="tDuck" data-t="duck">DUCK</button>
 </div>
 
 <div id="hud" hidden>
@@ -372,6 +389,8 @@
     <div id="buffs" hidden></div>
   </div>
   <div id="slots" hidden></div>
+  <div id="blocksHud" class="pill" hidden>🧱 <b id="blocksN">0</b> <small><span class="key">F</span> build · hold <span class="key">C</span> to duck</small></div>
+  <div id="blockPop"></div>
   <div id="toast"></div>
   <div id="ammo" class="pill">
     <div class="n"><span id="ammoN">12</span><small> / <span id="ammoM">12</span></small></div>
@@ -486,12 +505,12 @@
           <b>W</b><b>A</b><b>S</b><b>D</b> move · mouse looks · click shoots<br>
           <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload<br>
           <b>1</b><b>2</b><b>3</b> or <b>E</b> place a defense · <b>Tab</b> picks one<br>
-          <b>T</b> teams · <b>Esc</b> pause
+          <b>F</b> build a block · hold <b>C</b> to duck · <b>T</b> teams · <b>Esc</b> pause
         </div>
         <div class="keys touch-only">
           Left thumb moves (push all the way to run)<br>
           Drag on the right to look · hold <b>FIRE</b> to shoot<br>
-          Tap a defense at the bottom to place it
+          Tap a defense at the bottom to place it · 🧱 builds · DUCK to duck
         </div>
         <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
       </div>
@@ -519,7 +538,7 @@
   // page, and after "Update ready" (?fresh=…) every file skips any cached copy.
   (function () {
     var fresh = new URLSearchParams(location.search).get('fresh');
-    var q = '?v=4' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
+    var q = '?v=5' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
     ['brain.js', 'net.js', 'game.js'].forEach(function (src) {
       var s = document.createElement('script');
       s.src = src + q; s.async = false; // run in this order
