@@ -54,9 +54,10 @@ console.log('Desktop 1280x720');
   });
   check(Math.abs(hop - 2.4) < 0.05, `jump onto a crate and up to the 2.4 m lookout (stood at ${hop.toFixed(2)})`);
   const wall = await page.evaluate(() => {
+    PBW.bots.forEach((b) => { b.alive = false; b.respawn = 3; }); // nobody to bump into or get splatted by
     const w = PBW.solids.find((o) => o.kind === 'wall' && o.h > 2 && o.x1 - o.x0 < 1);
     const me = PBW.me, zc = (w.z0 + w.z1) / 2;
-    Object.assign(me, { x: w.x0 - 1.5, z: zc, y: 0, vx: 0, vz: 0, yaw: -Math.PI / 2, onGround: true });
+    Object.assign(me, { x: w.x0 - 1.5, z: zc, y: 0, vx: 0, vz: 0, yaw: -Math.PI / 2, onGround: true, alive: true, hp: 5 });
     PBW.keys.KeyW = true;
     for (let i = 0; i < 120; i++) { PBW.keys.Space = i % 30 < 3; PBW.step(1 / 60); }
     PBW.keys.KeyW = PBW.keys.Space = false;

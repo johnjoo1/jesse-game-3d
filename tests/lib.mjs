@@ -31,8 +31,10 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 let failures = 0;
 export const check = (ok, msg) => { console.log((ok ? '  ok  ' : '  FAIL ') + msg); if (!ok) failures++; };
 
-export async function open(opts) {
-  const ctx = await browser.newContext(opts);
+export const newContext = (opts) => browser.newContext(opts);
+export async function open(opts = {}) {
+  const { query, context, ...ctxOpts } = opts;
+  const ctx = context || await browser.newContext(ctxOpts);
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -40,7 +42,9 @@ export async function open(opts) {
   if (process.env.THREE_PATH) {
     await page.route('**/cdnjs.cloudflare.com/**/three.min.js', (r) => r.fulfill({ path: process.env.THREE_PATH, contentType: 'text/javascript' }));
   }
-  await page.goto(URL0);
+  // multiplayer tests use the BroadcastChannel stand-in (net.js), not the real PeerJS
+  await page.route(/(cdnjs\.cloudflare\.com|unpkg\.com).*peerjs/, (r) => r.fulfill({ body: '/* PeerJS left out in tests */', contentType: 'text/javascript' }));
+  await page.goto(URL0 + (opts && opts.query ? '&' + opts.query : ''));
   await page.waitForFunction(() => window.PBW);
   return { ctx, page, errors };
 }

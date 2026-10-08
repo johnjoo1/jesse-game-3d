@@ -223,6 +223,71 @@
     body.touch #board { min-width: 0; }
   }
   #msg { padding: 24px; max-width: 420px; }
+
+  /* ---------- playing with friends ---------- */
+  #mp { margin-top: 16px; }
+  /* wide but short screens (a laptop, a phone held sideways): the start screen splits into two columns */
+  @media (max-height: 760px) and (min-width: 700px) {
+    .card.menu { width: min(780px, 100%); }
+    .mcols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 26px; align-items: start; text-align: left; }
+    .mcols #mp { margin-top: 0; }
+    .mcols #mp .or { margin-top: 2px; }
+  }
+  #mp .or { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 800; margin-bottom: 8px; }
+  .mprow { display: flex; gap: 8px; margin-top: 8px; }
+  .mprow .big.alt { margin-top: 0; flex: 1; }
+  #code { width: 120px; flex: none; box-sizing: border-box; font-size: 22px; font-weight: 900; text-align: center; letter-spacing: .15em;
+    padding: 8px; border: 3px solid #d5dbe6; border-radius: 14px; text-transform: uppercase; -webkit-user-select: text; user-select: text; outline: none; }
+  #code:focus { border-color: #7cc8ff; }
+  #netmsg { margin-top: 10px; font-size: 14px; font-weight: 700; color: #b8336a; min-height: 1px; }
+  .card.wide { width: min(560px, 100%); }
+  .code { color: var(--pink); letter-spacing: .12em; }
+  .muted { color: var(--muted); font-size: 14px; font-weight: 700; }
+  .lrow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; text-align: left; }
+  .lrow > b { min-width: 64px; }
+  .seg { display: flex; border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; }
+  .seg button { border: 0; background: #fff; font-size: 17px; font-weight: 800; padding: 8px 14px; cursor: pointer; }
+  .seg button + button { border-left: 2px solid var(--ink); }
+  .seg button.sel { background: var(--ink); color: #fff; }
+  .step { display: flex; align-items: center; border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; }
+  .step button { border: 0; background: #fff; font-size: 22px; font-weight: 900; width: 44px; height: 40px; cursor: pointer; }
+  .step span { min-width: 42px; text-align: center; font-size: 20px; font-weight: 900; }
+  .plist { list-style: none; margin: 12px 0; padding: 0; text-align: left; max-height: 46vh; overflow-y: auto; }
+  .plist li { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 2px solid #eef1f6; font-weight: 700; flex-wrap: wrap; }
+  .plist li.th { font-weight: 900; min-height: 34px; border-bottom: 0; margin-top: 6px; }
+  .plist .d { width: 16px; height: 16px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(0,0,0,.15); }
+  .plist .nm { flex: 1; min-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { border: 3px solid var(--tc); background: #fff; color: var(--ink); border-radius: 999px; font-size: 14px; font-weight: 800;
+    padding: 5px 11px; cursor: pointer; }
+  .chip.sel { background: var(--tc); color: #1c2230; }
+  .chip:disabled { cursor: default; opacity: .85; }
+  .tbtn { border: 0; border-radius: 12px; background: var(--pink); color: #fff; font-size: 16px; font-weight: 800; padding: 9px 14px;
+    cursor: pointer; text-shadow: none; }
+  .tbtn.alt { background: #e9eef6; color: var(--ink); }
+  .key { display: inline-block; font-size: 11px; font-weight: 900; border: 2px solid currentColor; border-radius: 5px; padding: 0 4px; margin-left: 4px; opacity: .8; }
+  .asked, .leaving { font-size: 14px; font-weight: 800; color: var(--muted); }
+  .leaving { color: #e06a10; }
+  #lStart, #lShuffle { margin-top: 8px; }
+  #lWait, #goWait { margin: 14px 0 0; }
+
+  #teamBtn { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); pointer-events: auto; border: 0; border-radius: 999px;
+    background: var(--pill); color: #fff; font-size: 16px; font-weight: 800; padding: 9px 16px; cursor: pointer; }
+  body.touch #teamBtn { transform: none; left: calc(50% + 34px); top: 14px; font-size: 14px; padding: 9px 12px; }
+  #capBar { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); width: min(460px, 84vw); text-align: center;
+    background: var(--pill); border-radius: 14px; padding: 8px 14px; font-size: 16px; font-weight: 800; box-shadow: inset 0 0 0 3px var(--cc, #fff); }
+  #capBar .bar { height: 10px; border-radius: 5px; background: rgba(255,255,255,.25); overflow: hidden; margin-top: 6px; }
+  #capBar .bar i { display: block; height: 100%; width: 0; background: var(--cc, #fff); }
+  body.touch #capBar { top: 66px; font-size: 14px; }
+  #teamAsk { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); pointer-events: auto; background: #fff; color: var(--ink);
+    text-shadow: none; border-radius: 18px; padding: 14px 18px; box-shadow: 0 10px 40px rgba(0,0,0,.35); text-align: center; z-index: 2;
+    width: max-content; max-width: 90vw; }
+  #askText { font-size: 19px; font-weight: 800; margin-bottom: 10px; }
+  #teamPanel, #gameover { z-index: 21; background: rgba(18, 30, 52, 0.45); }
+  #netOverlay { position: fixed; left: 0; right: 0; top: 40%; z-index: 22; text-align: center; color: #fff; font-size: 18px; font-weight: 800; }
+  #netOverlay .pill { display: inline-flex; align-items: center; gap: 12px; padding: 12px 18px; }
+  #feed div.note { font-weight: 700; }
+  #board .r .n { opacity: .75; min-width: 22px; text-align: right; }
 </style>
 </head>
 <body>
@@ -259,6 +324,58 @@
   </div>
   <div id="dead" hidden><div class="t pill" style="display:inline-block;padding:12px 26px"></div><div class="c"></div></div>
   <button id="pauseBtn" class="touch-only" aria-label="Pause">II</button>
+  <button id="teamBtn" hidden></button>
+  <div id="capBar" hidden><span></span><div class="bar"><i></i></div></div>
+  <div id="teamAsk" hidden role="alert">
+    <div id="askText"></div>
+    <button class="tbtn" data-ans="accept">Accept <span class="key desk-only">Y</span></button>
+    <button class="tbtn alt" data-ans="decline">No thanks <span class="key desk-only">N</span></button>
+  </div>
+</div>
+
+<div id="teamPanel" class="screen" hidden>
+  <div class="card wide">
+    <h1 id="tpTitle">Team up</h1>
+    <p class="sub" id="tpNote"></p>
+    <ul id="tpList" class="plist"></ul>
+    <button id="tpClose" class="big alt">Close <span class="key desk-only">T</span></button>
+  </div>
+</div>
+
+<div id="gameover" class="screen" hidden>
+  <div class="card">
+    <h1 id="goTitle"></h1>
+    <p class="sub" id="goSub"></p>
+    <button id="goLobby" class="big">Back to the lobby</button>
+    <p class="sub" id="goWait">Waiting for the host to start another round…</p>
+  </div>
+</div>
+
+<div id="lobby" class="screen" hidden>
+  <div class="card wide">
+    <h1>Room <span id="lCode" class="code"></span></h1>
+    <p class="sub" id="lHint"></p>
+    <div id="lHostOpts">
+      <div class="lrow"><b>Teams</b>
+        <div class="seg" id="lTeams">
+          <button data-teams="0">None</button><button data-teams="2">2</button><button data-teams="3">3</button><button data-teams="4">4</button>
+        </div>
+      </div>
+      <div class="lrow"><b>Players</b>
+        <div class="step"><button id="lMinus" aria-label="Fewer players">−</button><span id="lTotal">9</span><button id="lPlus" aria-label="More players">+</button></div>
+        <span id="lBots" class="muted"></span>
+      </div>
+    </div>
+    <ul id="lPeople" class="plist"></ul>
+    <button id="lShuffle" class="big alt">Shuffle teams</button>
+    <button id="lStart" class="big">Start game</button>
+    <p class="sub" id="lWait">Waiting for the host to start…</p>
+    <button id="lLeave" class="big alt">Leave</button>
+  </div>
+</div>
+
+<div id="netOverlay" hidden>
+  <div class="pill"><span id="netText"></span> <button id="netLeave" class="tbtn alt">Leave</button></div>
 </div>
 <div id="hurt"></div>
 <div id="splats"></div>
@@ -266,25 +383,43 @@
 <div id="shieldFx"></div>
 
 <div id="menu" class="screen" hidden>
-  <div class="card">
+  <div class="card menu">
     <h1>Paintball <span>Wars</span> 3D</h1>
     <p class="sub">Splat the bots. Hide in the bushes. Climb the towers!</p>
-    <label for="name">Your name</label>
-    <input id="name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Type your name">
-    <label>Your color</label>
-    <div id="colors"></div>
-    <button id="play" class="big">Play!</button>
-    <div class="keys desk-only">
-      <b>W</b><b>A</b><b>S</b><b>D</b> move · mouse looks · click shoots<br>
-      <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload · <b>Esc</b> pause<br>
-      <b>1</b><b>2</b><b>3</b> or <b>E</b> place a defense · <b>Tab</b> or wheel picks one
+    <div class="mcols">
+      <div class="mcol">
+        <label for="name">Your name</label>
+        <input id="name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Type your name">
+        <label>Your color</label>
+        <div id="colors"></div>
+        <button id="play" class="big">Play!</button>
+      </div>
+      <div class="mcol">
+        <div id="mp">
+          <div class="or">or play with friends</div>
+          <div class="mprow">
+            <button id="hostBtn" class="big alt">Host a game</button>
+          </div>
+          <div class="mprow">
+            <input id="code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code">
+            <button id="joinBtn" class="big alt">Join</button>
+          </div>
+          <div id="netmsg" role="status"></div>
+        </div>
+        <div class="keys desk-only">
+          <b>W</b><b>A</b><b>S</b><b>D</b> move · mouse looks · click shoots<br>
+          <b>Shift</b> sprint · <b>Space</b> jump · <b>R</b> reload<br>
+          <b>1</b><b>2</b><b>3</b> or <b>E</b> place a defense · <b>Tab</b> picks one<br>
+          <b>T</b> teams · <b>Esc</b> pause
+        </div>
+        <div class="keys touch-only">
+          Left thumb moves (push all the way to run)<br>
+          Drag on the right to look · hold <b>FIRE</b> to shoot<br>
+          Tap a defense at the bottom to place it
+        </div>
+        <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
+      </div>
     </div>
-    <div class="keys touch-only">
-      Left thumb moves (push all the way to run)<br>
-      Drag on the right to look · hold <b>FIRE</b> to shoot<br>
-      Tap a defense at the bottom to place it
-    </div>
-    <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
   </div>
 </div>
 
@@ -292,6 +427,7 @@
   <div class="card">
     <h1>Paused</h1>
     <p class="sub desk-only">Click Keep playing, then move the mouse to look around.</p>
+    <p class="sub" id="pauseNote"></p>
     <button id="resume" class="big">Keep playing</button>
     <button id="quit" class="big alt">Back to start</button>
   </div>
@@ -300,6 +436,10 @@
 <div id="msg" class="screen" hidden><div class="card"><h1>Oops!</h1><p class="sub" id="msgText"></p></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="game.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"
+        onerror="var s=document.createElement('script');s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';document.head.appendChild(s)"></script>
+<!-- ?v= changes with each version, so a browser never mixes an old game.js with a new page -->
+<script src="net.js?v=3"></script>
+<script src="game.js?v=3"></script>
 </body>
 </html>

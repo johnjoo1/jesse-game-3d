@@ -9,7 +9,7 @@ Open `index.html` in a browser, or play it on GitHub Pages (see below). Nothing 
 
 - **Computer:** click the game to grab the mouse. WASD/arrows move · mouse looks · click shoots ·
   Shift sprints · Space jumps · R reloads · 1/2/3 or E (or right-click) place a defense · Tab or the mouse
-  wheel picks which one E places · Esc or P pauses
+  wheel picks which one E places · T opens Teams · Esc or P pauses
 - **Phone/tablet:** put your left thumb down anywhere on the left side to get a thumbstick (push past the
   edge to run) · drag on the right side to look · hold **FIRE** to shoot (you can drag the FIRE button to aim
   while shooting) · **JUMP** · ⟳ reloads · tap a carried defense to place it · **II** pauses.
@@ -73,9 +73,62 @@ run on a timer and blink just before they go.
 Bots play with items too. They walk over to drops they can see, use heal stations when they're hurt, place their
 defenses in a fight, and shoot at enemy turrets.
 
+## Playing with friends (Milestone 3)
+
+1. One person taps **Host a game**. That opens the lobby with a 4-letter room code.
+2. Friends open the same page, type the code and tap **Join**. They wait in the lobby and see it update live.
+3. The host picks:
+   - **Teams:** None (everyone for themselves), 2, 3 or 4
+   - **Players:** the total, people plus bots (2–30). Bots fill whatever spots people don't.
+   - **Who's on which team:** tap a team color next to each person, or **Shuffle teams**. New arrivals go to the
+     smallest team.
+4. The host taps **Start game**.
+
+Up to 8 people can play at once (the rest of the 30 spots are bots). This is peer-to-peer: the host's device runs
+the game and friends connect straight to it, using the free PeerJS service to find each other. Nobody needs an
+account. **The host should keep the game on screen:** if the host's tab goes to the background, the browser pauses
+it and the game stops for everyone. If the host leaves, the game ends for everyone. Some school or work networks
+block these direct connections.
+
+**Team games:** everyone wears their team's color and always spawns at their team's base, a big ring with a flag
+(2 teams face off west and east, 3 sit in a triangle, 4 on all sides). Teammates can't splat each other, they
+always show on your minimap, and the leaderboard shows each team's size and splats.
+
+**Capturing bases:** get more of your team inside an enemy base than they have defending it and a capture ring
+fills up in your color (about 8 seconds, faster with a bigger edge); a bar at the top shows how it's going, and
+the defending team gets a warning. More defenders than attackers drains it; a tie holds it. When the ring fills,
+that base is gone and its whole team switches to yours. The game ends when only one team is left; the host can
+then take everyone back to the lobby for another round. Bots play the objective too: most attack the nearest
+enemy base, some guard home, and they all rush back when their base is under attack.
+
+**Moving people:** in a team game the host can open **👥 Teams** (or press **T**) and tap a team color to move
+anyone, people or bots, to another team. They respawn at their new base.
+
+**A friend who joins mid-game** goes to the team with the fewest people and takes a bot's spot.
+
+**Bad connection?** If a friend's connection drops, the host keeps their player (team and score) for 90 seconds,
+and their game reconnects by itself. Closing the game and joining the same room again within that time, with the
+same name, also brings them back as themselves. After 90 seconds their spot goes to a bot.
+
+## Teaming up during a game
+
+In games without set teams (solo, or a hosted game with Teams: None), tap **🤝 Team up** at the top (or press
+**T**) to see everyone, people and bots. Tap **Team up** next to someone; a person gets a pop-up to **Accept** (Y)
+or say **No thanks** (N), and a bot decides after a moment.
+
+Teammates can't splat each other (their paint passes straight through), aren't targeted by each other's turrets,
+can see each other's mines, show as green dots on each other's minimap, and have a green dashed ring and 🤝 by
+their name. Either player can **Leave team** from the same list. It takes 3 seconds (the ring turns orange) so
+nobody can turn on a teammate without warning. A person can team up with several others; each pair agrees
+separately.
+
+**Bots and teams:** bots pair up with each other now and then, and sometimes ask you. A bot has at most one
+teammate, usually says yes when asked, but says no if you splatted it in the last 30 seconds. Bot teams last a few
+minutes, then the bot moves on (with the same 3-second warning). Bots stick near their teammate when there's
+nobody to fight.
+
 ## Coming next
 
-- **Milestone 3:** multiplayer with friends (PeerJS), teams and base capture
 - **Milestone 4:** Brain Boost questions and "Update ready"
 
 ## Turning on GitHub Pages
@@ -88,11 +141,18 @@ defenses in a fight, and shoot at enemy turrets.
 
 ## For grown-ups: how it's built
 
-- `index.html`: screens, HUD and touch controls. `game.js`: the whole game.
-- Three.js r128 from cdnjs. Plain JavaScript with no build step.
+- `index.html`: screens, HUD and touch controls. `game.js`: the whole game, including multiplayer.
+  `net.js`: a stand-in for PeerJS used by the tests (see below).
+- Three.js r128 and PeerJS 1.5.4 from cdnjs (PeerJS falls back to unpkg). Plain JavaScript with no build step.
+- Multiplayer: the host runs the game. Each friend's game moves its own player and shows its own shots right
+  away, and tells the host 30 times a second; the host decides every hit, splat, pickup and capture and sends
+  everyone the game 15 times a second, plus every effect as an event.
+- `?fakenet` swaps PeerJS for a look-alike built on BroadcastChannel, so two tabs of one browser can play each
+  other with no internet; `?fakenet=slow` also keeps a room code reserved for a minute after its tab closes, like
+  the real matchmaking service sometimes does.
 - To keep it smooth on phones, it uses no real-time shadows, two lights, instanced meshes for the scenery,
   paint splats and paintballs, and recycles old paint splats after 700.
-- `tests/smoke.mjs` (controls, movement, bots, phone layout) and `tests/items.mjs` (every power-up and
-  defense rule) drive the game in headless Chromium with Playwright, at laptop and phone sizes
-  (`node tests/smoke.mjs`, `node tests/items.mjs`). Add `?test` to the page address to play without grabbing
+- `tests/smoke.mjs` (controls, movement, bots, phone layout), `tests/items.mjs` (every power-up and defense rule)
+  and `tests/multi.mjs` (hosting, joining, lobby, teams, bases, team-ups, reconnecting, slow matchmaking) drive
+  the game in headless Chromium with Playwright, at laptop and phone sizes (`node tests/<name>.mjs`). Add `?test` to the page address to play without grabbing
   the mouse.
