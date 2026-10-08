@@ -19,10 +19,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SHOTS = process.env.SHOTS || path.join(root, 'tests', 'shots');
 fs.mkdirSync(SHOTS, { recursive: true });
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' };
+// bump() makes the server hand out a slightly different game.js, like a new version going online
+let bumps = 0;
+export const bump = () => { bumps++; };
 const server = http.createServer((req, res) => {
   const f = path.join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/\/$/, '/index.html'));
   if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
+  if (bumps && f.endsWith('game.js')) { res.end(fs.readFileSync(f, 'utf8') + `\n// update ${bumps}\n`); return; }
   fs.createReadStream(f).pipe(res);
 }).listen(0);
 const URL0 = `http://127.0.0.1:${server.address().port}/index.html?test`;
@@ -38,7 +42,7 @@ export async function open(opts = {}) {
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('pageerror', (e) => errors.push(String(e) + (e.stack ? ' @ ' + e.stack.split('\n').slice(1, 3).join(' ').trim() : '')));
   if (process.env.THREE_PATH) {
     await page.route('**/cdnjs.cloudflare.com/**/three.min.js', (r) => r.fulfill({ path: process.env.THREE_PATH, contentType: 'text/javascript' }));
   }

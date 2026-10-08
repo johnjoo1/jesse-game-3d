@@ -614,7 +614,7 @@
       const c = pick(navPoints);
       if (k < 13 && heightAt(c.x, c.z, 0.9) > 0) continue; // a barricade or turret is standing there
       let near = 99;
-      for (const o of chars) if (o !== p && o.alive && !friendly(o, p)) near = Math.min(near, Math.hypot(o.x - c.x, o.z - c.z));
+      for (const o of chars) if (o !== p && inPlay(o) && !friendly(o, p)) near = Math.min(near, Math.hypot(o.x - c.x, o.z - c.z));
       if (near > bestScore) { bestScore = near; best = c; }
     }
     return best;
@@ -629,6 +629,7 @@
     p.hp = p.maxHp; p.alive = true; p.shield = SPAWN_SHIELD; p.ammo = p.magSize; p.reload = 0; p.cooldown = 0.3;
     p.stamina = STAMINA_MAX; p.target = null; p.mode = 'wander'; p.goal = null; p.lastHitBy = null; p.deadT = 0;
     p.ss++; // spawn counter: tells a friend's screen to jump to the new spot
+    p.askT = 0; p.asking = false;
     clearSpots(p);
     p.m.g.visible = true; p.m.g.scale.set(1, 1, 1); p.m.shadow.visible = true;
     if (p === me) { sfx.spawn(); setDeadUI(false); }
@@ -678,7 +679,7 @@
         if (ballVsDeploys(b, px, py, pz)) { done = true; break; }
         // people
         for (const c of chars) {
-          if (!c.alive || friendly(c, b.owner)) continue; // your own paint passes through you
+          if (!inPlay(c) || friendly(c, b.owner)) continue; // your own paint passes through you
           if (c.shield > 0 && inBubble(c, b.x, b.y, b.z)) { burst(b.x, b.y, b.z, '#bff6ff', 8, 3); if (c === me || b.owner === me) sfx.block(); done = true; break; }
           if (hitsBody(c, b.x, b.y, b.z)) {
             if (b.vis) burst(b.x, b.y, b.z, b.color, 6, 2.5); // the host's hit event paints them
@@ -788,9 +789,9 @@
   function jump(p) { if (p.onGround) { p.vy = JUMP_V; p.onGround = false; } }
   function separate() { // keep people from walking through each other
     for (let i = 0; i < chars.length; i++) {
-      const a = chars[i]; if (!a.alive || a.remote) continue;
+      const a = chars[i]; if (!inPlay(a) || a.remote) continue;
       for (let j = i + 1; j < chars.length; j++) {
-        const b = chars[j]; if (!b.alive || b.remote || Math.abs(a.y - b.y) > 1.4) continue;
+        const b = chars[j]; if (!inPlay(b) || b.remote || Math.abs(a.y - b.y) > 1.4) continue;
         const dx = b.x - a.x, dz = b.z - a.z, d2 = dx * dx + dz * dz;
         if (d2 > 0.81 || d2 < 1e-6) continue;
         const d = Math.sqrt(d2), push = (0.9 - d) / 2, ux = dx / d, uz = dz / d;
@@ -846,6 +847,7 @@
   let alliances = {}, requests = {}, botAnswers = {}, botTeamT = 8; // team-ups: "a|b" -> { breakT, life }
   const pairKey = (a, b) => (a.id < b.id ? a.id + '|' + b.id : b.id + '|' + a.id);
   const allied = (a, b) => a !== b && !!alliances[pairKey(a, b)];
+  const inPlay = (c) => c.alive && !c.awayUntil; // (a friend whose game is reconnecting stays out of play)
   const friendly = (a, b) => a === b || (teamMode > 0 && a.team != null && a.team === b.team) || allied(a, b);
 
   // round badge with the item's symbol, for drops and floating labels
@@ -927,7 +929,7 @@
       animateDrop(d, dt);
       // with all 3 carry slots full, a defense stays on the ground for someone else
       const place = POWERUPS[d.type].place;
-      const near = (p) => p.alive && Math.hypot(p.x - d.x, p.z - d.z) < 1.1 && Math.abs(p.y - d.y) < 1.4;
+      const near = (p) => inPlay(p) && Math.hypot(p.x - d.x, p.z - d.z) < 1.1 && Math.abs(p.y - d.y) < 1.4;
       const taker = chars.find((p) => near(p) && (!place || p.items.length < MAX_CARRY));
       if (!taker) {
         if (me && near(me) && fullNoteT <= 0) { fullNoteT = 3; toast('Your 3 defense slots are full. Place one to make room!', '#ffffff'); }
@@ -1031,7 +1033,7 @@
     for (let k = 0; k < 5; k++) { const a = Math.random() * 6.28, r = rand(1, R); spots.push([r2(d.x + Math.cos(a) * r), r2(d.z + Math.sin(a) * r)]); }
     fx({ t: 'boom', x: r2(d.x), y: r2(d.y), z: r2(d.z), c: d.color, s: spots });
     for (const q of chars) { // everyone nearby except the owner's side takes 2 hits, counted as the owner's
-      if (!q.alive || friendly(q, d.owner) || Math.hypot(q.x - d.x, q.z - d.z) > R || Math.abs(q.y - d.y) > 2) continue;
+      if (!inPlay(q) || friendly(q, d.owner) || Math.hypot(q.x - d.x, q.z - d.z) > R || Math.abs(q.y - d.y) > 2) continue;
       hitChar(q, d.owner, q.x, q.y + 0.8, q.z, 2, d.color, d);
     }
   }
@@ -1044,7 +1046,7 @@
       if (d.type === 'heal') {
         // heals anyone standing in it, friend or foe
         for (const q of chars) {
-          if (!q.alive || Math.hypot(q.x - d.x, q.z - d.z) >= cfg.r || Math.abs(q.y - d.y) > 2) continue;
+          if (!inPlay(q) || Math.hypot(q.x - d.x, q.z - d.z) >= cfg.r || Math.abs(q.y - d.y) > 2) continue;
           q.healT += dt;
           if (q.healT >= 1.5 && q.hp < q.maxHp) {
             q.healT = 0; q.hp++;
@@ -1054,7 +1056,7 @@
         if (Math.random() < dt * 6) burst(d.x + rand(-1.2, 1.2), d.y + 0.1, d.z + rand(-1.2, 1.2), '#9dffc0', 1, 1.2);
       } else if (d.type === 'mine') {
         if (d.cool > 0) d.cool -= dt;
-        else if (chars.some((q) => q.alive && !friendly(q, d.owner) && Math.hypot(q.x - d.x, q.z - d.z) < cfg.trigger && Math.abs(q.y - d.y) < 1.2)) {
+        else if (chars.some((q) => inPlay(q) && !friendly(q, d.owner) && Math.hypot(q.x - d.x, q.z - d.z) < cfg.trigger && Math.abs(q.y - d.y) < 1.2)) {
           boom(d);
           continue;
         }
@@ -1063,7 +1065,7 @@
         let best = null, bestD = cfg.range;
         const hx = d.x, hy = d.y + 0.75, hz = d.z;
         for (const o of chars) {
-          if (friendly(o, d.owner) || !o.alive || o.shield > 0) continue;
+          if (friendly(o, d.owner) || !inPlay(o) || o.shield > 0) continue;
           const dd = Math.hypot(o.x - hx, o.z - hz);
           if (dd > bestD || (concealed(o) && dd > HIDE_NEAR) || !clearLine(hx, hy, hz, o.x, o.y + 0.9, o.z, dd > HIDE_NEAR)) continue;
           best = o; bestD = dd;
@@ -1187,7 +1189,7 @@
     let best = null, bestScore = Infinity;
     const fwx = -Math.sin(b.yaw), fwz = -Math.cos(b.yaw);
     for (const o of chars) {
-      if (!o.alive || friendly(b, o)) continue;
+      if (!inPlay(o) || friendly(b, o)) continue;
       const dx = o.x - b.x, dz = o.z - b.z, d = Math.hypot(dx, dz);
       if (d > SIGHT) continue;
       const alert = (b.hurtBy === o && b.hurtT > 0) || o === b.target;
@@ -1470,10 +1472,10 @@
   document.addEventListener('pointerlockchange', () => {
     locked = document.pointerLockElement === canvas;
     if (locked && state === 'pause') resume();
-    if (!locked && state === 'play' && !touchMode && !TEST && !panelOpen && $('gameover').hidden) pause();
+    if (!locked && state === 'play' && !touchMode && !TEST && !panelOpen && $('gameover').hidden && brain.state === 'off') pause();
   });
   canvas.addEventListener('mousedown', (e) => {
-    if (state !== 'play' || touchMode) return;
+    if (state !== 'play' || touchMode || brain.state !== 'off') return;
     if (!locked && !TEST) { lockPointer(); return; }
     if (e.button === 0) { initAudio(); mouseDown = true; }
   });
@@ -1490,6 +1492,11 @@
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') { if (e.target.id === 'code') joinGame(); else startGame(); } return; }
     setTouchMode(false);
+    if (brain.state !== 'off' && (state === 'play' || state === 'pause')) { // the Brain Boost card: 1/2/3 answer, Enter or Space goes on
+      const n = ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].indexOf(e.code);
+      if (n >= 0) { brainKey(n % 3); e.preventDefault(); return; }
+      if ((e.code === 'Enter' || e.code === 'Space') && brainEl.querySelector('.go')) { e.preventDefault(); brainEl.querySelector('.go').click(); return; }
+    }
     keys[e.code] = true;
     if (state === 'play' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     if (state === 'play' && e.code === 'KeyR' && me) startReload(me);
@@ -1686,12 +1693,14 @@
         html = '<div class="h">Splats</div>' + rows.map((p) =>
           `<div class="r${p === me ? ' me' : ''}"><span class="d" style="background:${p.color}"></span><span class="nm">${sorted.indexOf(p) + 1}. ${esc(p.name)}${allied(me, p) ? ' 🤝' : ''}${p.away ? ' 💤' : ''}</span><span>${p.kills}</span></div>`).join('');
       }
-      boardEl.innerHTML = html;
+      const bs = brainScoreText();
+      boardEl.innerHTML = html + (bs ? `<div class="bscore">${bs}</div>` : '');
       updateSightings();
       if (panelOpen) renderTeams();
       updateCapBar();
     }
     updateAsk();
+    brainTick();
     $('teamBtn').hidden = !(state === 'play' && me);
     drawMap();
   }
@@ -1816,6 +1825,8 @@
   }
   // clear the arena: nobody in it, no paint, no items, no team-ups
   function resetWorld() {
+    if (brain.state !== 'off') { clearGoRows(); brainEl.hidden = true; brain.state = 'off'; }
+    brain.seen = null;
     removeAllChars();
     clearDecals(); clearItems(); clearBases();
     balls.length = 0;
@@ -2113,7 +2124,7 @@
     if (!teamMode || gameOver != null) return;
     for (const b of bases) {
       if (!b.alive) continue;
-      const inside = chars.filter((p) => p.alive && p.team != null && Math.hypot(p.x - b.x, p.z - b.z) < BASE_R && p.y < 4);
+      const inside = chars.filter((p) => inPlay(p) && p.team != null && Math.hypot(p.x - b.x, p.z - b.z) < BASE_R && p.y < 4);
       const count = (t) => inside.filter((p) => p.team === t).length;
       const defenders = count(b.team);
       const attackers = [...new Set(inside.filter((p) => p.team !== b.team).map((p) => p.team))].sort((x, y) => count(y) - count(x));
@@ -2152,7 +2163,7 @@
     for (const b of bases) {
       b.g.visible = b.alive;
       b.flag.rotation.y = Math.sin(now * 2 + b.team) * 0.25;
-      const key = b.alive && b.cap > 0 ? b.capTeam + ':' + Math.round(b.cap * 60) : '';
+      const key = b.alive && b.cap > 0 && TEAM_INFO[b.capTeam] ? b.capTeam + ':' + Math.round(b.cap * 60) : '';
       if (key === b.progKey) continue;
       b.progKey = key;
       if (b.prog) { b.g.remove(b.prog); b.prog.geometry.dispose(); b.prog = null; }
@@ -2178,6 +2189,9 @@
     $('goSub').textContent = me && me.team === w ? 'Your team took every base. Great job!' : 'Every base belongs to Team ' + T0.name + ' now.';
     $('goLobby').hidden = mode !== 'host';
     $('goWait').hidden = mode === 'host';
+    const bs = brainScoreText();
+    $('goBrain').hidden = !bs;
+    $('goBrain').textContent = bs ? `Your Brain Boost: ${brain.ok} right out of ${brain.all}` + (brain.stars ? ` · ⭐ ${brain.stars} challenge${brain.stars === 1 ? '' : 's'}` : '') : '';
     $('gameover').hidden = false;
     if (locked) document.exitPointerLock();
   }
@@ -2186,7 +2200,6 @@
   // Peer-to-peer with PeerJS: the host's device runs the game and friends connect straight to it. Friends
   // send where they are and what they did; the host sends everyone the game 15 times a second.
   const PEER_PREFIX = 'pbw3d-jesse-', MAX_HUMANS = 8, MAX_PLAYERS = 30, CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const VERSION = 3; // a host and a friend on different versions are asked to refresh
   const NO_SERVER = "Couldn't reach the multiplayer service. Check your internet connection and try again.";
   let mode = 'solo';                  // solo | host | client
   let peer = null, conns = [], hostConn = null, roomCode = '', connecting = false;
@@ -2200,8 +2213,8 @@
   const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
   function stopNet() {
     netGen++;
-    try { if (peer) peer.destroy(); } catch (e) { /* already closed */ }
-    peer = null; conns = []; hostConn = null; connecting = false;
+    for (const pr of [peer, basePeer]) { try { if (pr) pr.destroy(); } catch (e) { /* already closed */ } }
+    peer = null; basePeer = null; conns = []; hostConn = null; connecting = false;
   }
   function sendHost(m) { if (hostConn && hostConn.open) { try { hostConn.send(m); } catch (e) { /* dropped */ } } }
   function newCode() { let c = ''; for (let i = 0; i < 4; i++) c += CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]; return c; }
@@ -2209,29 +2222,44 @@
   function saveProfile() { store.set('pbw3d-profile', { name: myName(), color: chosenColor }); }
 
   // ----- hosting -----
-  function hostGame(code, tries = 0) {
+  // reopen = { gen, lobby? } after an update: the host comes back at CODE-gen (see "Update ready")
+  function hostGame(code, tries = 0, reopen = null) {
     if (connecting) return;
-    if (!window.Peer) { netMsg(NO_SERVER); return; }
-    initAudio(); saveProfile();
+    if (!window.Peer) { if (reopen) addNote("Couldn't reopen the room, so friends can't rejoin"); else netMsg(NO_SERVER); return; }
+    if (!reopen) { initAudio(); saveProfile(); }
     connecting = true;
     code = code || newCode();
-    netMsg('Making a room…');
-    const gen = ++netGen, pr = peer = new window.Peer(PEER_PREFIX + code);
-    const timer = setTimeout(() => { if (netGen === gen && connecting) { stopNet(); netMsg(NO_SERVER); } }, 12000);
+    if (!reopen) netMsg('Making a room…');
+    const g = ++netGen, at = reopen ? reopen.gen : 1;
+    const pr = peer = new window.Peer(PEER_PREFIX + code + (at > 1 ? '-' + at : ''));
+    const timer = setTimeout(() => { if (netGen === g && connecting && !reopen) { stopNet(); netMsg(NO_SERVER); } }, 12000);
     pr.on('open', () => {
-      if (netGen !== gen) return;
+      if (netGen !== g) return;
       clearTimeout(timer);
       connecting = false;
       roomCode = code;
       mode = 'host';
-      lobby = { teams: 0, total: NUM_BOTS + 1, people: [{ id: 'p1', name: myName(), color: chosenColor, team: null, host: true }] };
-      myLobbyId = 'p1';
-      openLobby();
+      if (!reopen || reopen.lobby) {
+        if (!reopen) roomGen = 1;
+        lobby = { teams: reopen ? reopen.lobby.teams : 0, total: reopen ? reopen.lobby.total : NUM_BOTS + 1,
+          people: [{ id: 'p1', name: myName(), color: chosenColor, team: null, host: true }] };
+        if (lobby.teams) lobby.people[0].team = 0;
+        myLobbyId = 'p1';
+        openLobby();
+      }
+      if (at > 1) reclaimBase(code, 0);
     });
     pr.on('connection', setupHostConn);
     pr.on('error', (err) => {
-      if (netGen !== gen) return;
+      if (netGen !== g) return;
       clearTimeout(timer);
+      if (reopen && !roomCode) { // keep trying the fresh address for about 2 minutes
+        try { pr.destroy(); } catch (e) { /* already closed */ }
+        peer = null; connecting = false;
+        if (tries < 40) setTimeout(() => { if (!peer) hostGame(code, tries + 1, reopen); }, 3000);
+        else addNote("Couldn't reopen the room, so friends can't rejoin");
+        return;
+      }
       if (err.type === 'unavailable-id' && !roomCode) { // that code is taken (or still reserved): pick another
         try { pr.destroy(); } catch (e) { /* already closed */ }
         peer = null; connecting = false;
@@ -2239,6 +2267,18 @@
         return;
       }
       if (!roomCode) { stopNet(); netMsg(NO_SERVER); }
+    });
+  }
+  // after an update: also take the plain room code back (it frees up within a minute) for anyone joining new
+  function reclaimBase(code, tries) {
+    if (mode !== 'host' || roomCode !== code || basePeer) return;
+    const bp = basePeer = new window.Peer(PEER_PREFIX + code);
+    bp.on('connection', setupHostConn);
+    bp.on('error', () => {
+      if (basePeer !== bp) return;
+      try { bp.destroy(); } catch (e) { /* already closed */ }
+      basePeer = null;
+      if (tries < 100) setTimeout(() => reclaimBase(code, tries + 1), 3000);
     });
   }
   let nextPerson = 1;
@@ -2253,14 +2293,16 @@
       else if (m.t === 'team' && conn.player) {
         const other = byId(String(m.with));
         if (other && ['ask', 'accept', 'decline', 'cancel', 'break'].includes(m.act)) teamAction(conn.player, m.act, other);
-      } else if (m.t === 'bye') dropConn(conn, true);
+      } else if (m.t === 'brain' && conn.player && (m.k == null || POWERUPS[m.k])) brainReward(conn.player, m.k);
+      else if (m.t === 'bye') dropConn(conn, true);
     });
     conn.on('close', () => dropConn(conn, false));
     conn.on('error', () => dropConn(conn, false));
   }
   function hostHello(conn, m) {
     if (conn.player || conn.person) return;
-    if (m.v !== VERSION) { conn.send({ t: 'oldver' }); setTimeout(() => conn.close(), 400); return; }
+    if (updating) { conn.close(); return; } // about to reload: they'll retry and find the new page
+    if (pageVersion && m.v && m.v !== pageVersion) { conn.send({ t: 'oldver' }); setTimeout(() => conn.close(), 400); return; }
     const name = cleanName(m.name);
     if (state === 'lobby') {
       if (lobby.people.length >= MAX_HUMANS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 400); return; }
@@ -2282,9 +2324,10 @@
       if (old) { old.player = null; try { old.close(); } catch (e) { /* gone */ } }
       const wasAway = !!back.awayUntil;
       back.awayUntil = 0;
+      if (back.alive) back.shield = Math.max(back.shield, SPAWN_SHIELD);
       conn.player = back;
       if (!back.alive) back.respawn = Math.min(back.respawn, 1);
-      conn.send({ t: 'welcome', id: back.id, teams: teamMode, code: roomCode });
+      conn.send({ t: 'welcome', id: back.id, teams: teamMode, code: roomCode, gen: roomGen });
       if (wasAway) fx({ t: 'msg', s: `${back.name} is back` });
       return;
     }
@@ -2298,12 +2341,13 @@
     conn.player = p;
     spawn(p);
     rebalanceBots(p.team);
-    conn.send({ t: 'welcome', id: p.id, teams: teamMode, code: roomCode });
+    conn.send({ t: 'welcome', id: p.id, teams: teamMode, code: roomCode, gen: roomGen });
     fx({ t: 'msg', s: `${p.name} joined the game` });
     rosterT = 0;
   }
   function hostInput(p, m) {
     if (p.awayUntil) return;
+    p.asking = !!m.ask; // a Brain Boost question is up: their respawn waits
     if (num(m.ss) === p.ss && p.alive) { // positions from before a respawn are stale
       const lim = HALF - PLAYER_R;
       p.x = clamp(num(m.x, p.x), -lim, lim); p.y = clamp(num(m.y, p.y), 0, 30); p.z = clamp(num(m.z, p.z), -lim, lim);
@@ -2326,7 +2370,7 @@
       broadcastLobby();
     }
     const p = conn.player;
-    if (!p || mode !== 'host') return;
+    if (!p || mode !== 'host' || updating) return; // during an update, friends drop off on purpose
     conn.player = null;
     if (bye) { // they left on purpose: a bot takes their spot
       fx({ t: 'msg', s: `${p.name} left the game` });
@@ -2504,7 +2548,7 @@
     for (const c of conns) if (c.person) { c.person = null; } // anyone who arrived mid-click joins like a latecomer
     rebalanceBots();
     for (const c of chars) spawn(c);
-    for (const c of conns) if (c.player) c.send({ t: 'welcome', id: c.player.id, teams: teamMode, code: roomCode });
+    for (const c of conns) if (c.player) c.send({ t: 'welcome', id: c.player.id, teams: teamMode, code: roomCode, gen: roomGen });
     rosterT = 0; snapT = 0;
     lobbyEl.hidden = true;
     enterPlay();
@@ -2552,9 +2596,13 @@
     if (!opts.rejoin) { initAudio(); saveProfile(); }
     connecting = true;
     const tries = opts.tries || 0, back = !!opts.rejoin;
-    const maxTries = back ? 45 : 3; // about 90 seconds to get back in, a few seconds otherwise
-    if (back) setNetOverlay(`Connection lost. Reconnecting to room ${code}…`);
+    const maxTries = back ? 45 : 4; // about 90 seconds to get back in, a few seconds otherwise
+    if (back) setNetOverlay(opts.updated ? `Updated! Rejoining room ${code}…` : `Connection lost. Reconnecting to room ${code}…`);
     else netMsg(tries ? `Looking for room ${code}…` : `Joining room ${code}…`);
+    // A host who just updated is at CODE-gen (every third try also checks the plain code). Someone joining new
+    // tries the plain code first, then CODE-2 and CODE-3 in case the host updated in the last minute.
+    const at = opts.gen || roomGen || 1;
+    const suffix = back ? (at > 1 && tries % 3 !== 2 ? '-' + at : '') : ['', '-2', '-3', ''][tries % 4];
     const gen = ++netGen;
     try { if (peer) peer.destroy(); } catch (e) { /* gone */ }
     const pr = peer = new window.Peer();
@@ -2570,9 +2618,9 @@
     const timer = setTimeout(() => giveUp(`Couldn't join room ${code}. Check the code, and that the host still has the game open.`), 12000);
     pr.on('open', () => {
       if (netGen !== gen) return;
-      const conn = hostConn = pr.connect(PEER_PREFIX + code, { reliable: true });
+      const conn = hostConn = pr.connect(PEER_PREFIX + code + suffix, { reliable: true });
       const last = tabStore.get('pbw3d-last') || {};
-      conn.on('open', () => conn.send({ t: 'hello', v: VERSION, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
+      conn.on('open', () => conn.send({ t: 'hello', v: pageVersion, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
       conn.on('data', (m) => {
         if (!m || typeof m !== 'object' || netGen !== gen) return;
         if (m.t === 'lobby' && Array.isArray(m.people)) {
@@ -2583,22 +2631,36 @@
         } else if (m.t === 'welcome') {
           clearTimeout(timer); connecting = false;
           const wasPlaying = mode === 'client' && me && me.id === m.id && state !== 'menu' && state !== 'lobby';
-          mode = 'client'; roomCode = code; teamMode = num(m.teams); lastSnap = performance.now();
+          mode = 'client'; roomCode = code; teamMode = num(m.teams); lastSnap = performance.now(); roomGen = num(m.gen, 1);
           tabStore.set('pbw3d-last', { code, id: m.id });
           setNetOverlay('');
           if (!wasPlaying) { resetWorld(); gameOver = null; clientWaitId = m.id; lobbyEl.hidden = true; menuEl.hidden = true; }
+          if (pendingDecals) { restoreDecals(pendingDecals); pendingDecals = null; } // your paint, from before the update
+          if (opts.updated) addNote('✨ Updated! Back in the game.');
         } else if (m.t === 's' && mode === 'client') {
           lastSnap = performance.now();
           applySnapshot(m);
         } else if (m.t === 'tolobby') { // the host's lobby message follows
           $('gameover').hidden = true; gameOver = null; clientWaitId = null;
           resetWorld(); makeBots(); openLobby();
+        } else if (m.t === 'update') { // the host is updating everyone: save who we are and reload with them
+          roomGen = num(m.gen, roomGen + 1);
+          updating = true;
+          saveState(serializeGame());
+          stopNet();
+          reloadFresh();
         } else if (m.t === 'bye') {
           leaveGame('The host ended the game.');
         } else if (m.t === 'full') {
           clearTimeout(timer); stopNet(); netMsg(`That game is full (${MAX_HUMANS} people).`); connecting = false;
         } else if (m.t === 'oldver') {
           clearTimeout(timer); stopNet(); connecting = false;
+          if (opts.updated && (opts.fresh || 0) < 2) { // fetch a fresh copy of the game (twice at most), then keep trying
+            updating = true;
+            saveState({ ...serializeGame(), myId: opts.rejoin, gen: at, fresh: (opts.fresh || 0) + 1 });
+            reloadFresh();
+            return;
+          }
           const text = 'You and the host have different versions of the game. Both of you refresh the page, then try again.';
           if (state === 'menu') netMsg(text); else leaveGame(text);
         }
@@ -2628,7 +2690,7 @@
     if (!me || mode !== 'client') return;
     const code = roomCode, id = me.id;
     stopNet();
-    joinGame({ code, rejoin: id, tries: 0 });
+    joinGame({ code, rejoin: id, gen: roomGen, tries: 0 });
   }
   function setNetOverlay(text) {
     $('netOverlay').hidden = !text;
@@ -2725,7 +2787,7 @@
     sendT -= dt;
     if (sendT <= 0) {
       sendT = 1 / 30;
-      sendHost({ t: 'in', ss: me.ss, x: r2(me.x), y: r2(me.y), z: r2(me.z), yaw: r2(me.yaw), pitch: r2(me.pitch), vx: r2(me.vx), vz: r2(me.vz), og: me.onGround ? 1 : 0,
+      sendHost({ t: 'in', ss: me.ss, ask: brain.state !== 'off' ? 1 : 0, x: r2(me.x), y: r2(me.y), z: r2(me.z), yaw: r2(me.yaw), pitch: r2(me.pitch), vx: r2(me.vx), vz: r2(me.vz), og: me.onGround ? 1 : 0,
         shots: clientOut.shots.splice(0), uses: clientOut.uses.splice(0) });
     }
   }
@@ -2802,6 +2864,373 @@
     const b = e.target.closest('button');
     if (b && askFrom) requestTeam(b.dataset.ans, askFrom);
   });
+
+  // ---------- Brain Boost: a question card when you're splatted ----------
+  // Easy math or Spanish (Off / Math / Spanish / Mix, and Age 7-10, saved on each device). The respawn waits
+  // while the question is up. Right: a reward screen, then "Let's go!" brings you back with a boost.
+  // Wrong: you see the right answer and come back without a prize; nothing else happens.
+  // About 1 in 4 is a ⭐ challenge a grade harder, for a super prize. 3 right in a row: pick your prize.
+  // Two misses in a row: the next few are a grade easier.
+  const brainEl = $('brain');
+  const CHALLENGE_CHANCE = 0.25;
+  const SUPER_PRIZES = ['golden', 'turret', 'triple', 'dome', 'mine'];
+  const BRAIN_BOOSTS = ['rapid', 'speed', 'mag', 'triple', 'heart'];
+  const ALL_PRIZES = ['rapid', 'speed', 'mag', 'triple', 'golden', 'wall', 'heal', 'dome', 'turret', 'heart', 'bush', 'mine'];
+  const LEARN_MODES = ['off', 'math', 'spanish', 'mix'];
+  let learnMode = LEARN_MODES.includes(store.get('pbw3d-learn')) ? store.get('pbw3d-learn') : 'mix';
+  let brainAge = [7, 8, 9, 10].includes(store.get('pbw3d-age')) ? store.get('pbw3d-age') : 7;
+  const brain = { ok: 0, all: 0, streak: 0, misses: 0, easy: 0, stars: 0, state: 'off', q: null, seen: null, force: null, opened: 0 };
+
+  function nextQuestion() {
+    let level = brainAge, challenge = false;
+    const force = brain.force; brain.force = null; // tests can ask for a 'challenge' or a 'normal' one
+    if (force === 'challenge') { level = brainAge + 1; challenge = true; }
+    else if (brain.easy > 0) { brain.easy--; level = Math.max(6, brainAge - 1); } // after misses: a bit easier for a while
+    else if (force !== 'normal' && Math.random() < CHALLENGE_CHANCE) { level = brainAge + 1; challenge = true; } // a grade harder, super prize
+    const subject = learnMode === 'mix' ? pick(['math', 'spanish']) : learnMode;
+    const q = window.BrainBank.makeQuestion(subject, level);
+    q.challenge = challenge;
+    return q;
+  }
+  function openBrain() {
+    const q = brain.q = nextQuestion();
+    brain.state = 'ask'; brain.opened = now;
+    clearGoRows();
+    const card = brainEl.querySelector('.bcard');
+    card.classList.toggle('challenge', !!q.challenge);
+    brainEl.querySelector('.btag').innerHTML = q.challenge ? '<span class="star">⭐ Challenge</span>' : '🧠 Brain Boost';
+    $('bStreak').textContent = brain.streak ? `🔥 ${brain.streak} in a row` : '';
+    const qEl = $('bQ');
+    qEl.textContent = q.q;
+    if (q.sayPrompt) {
+      const b = document.createElement('button'); b.className = 'say'; b.textContent = '🔊'; b.setAttribute('aria-label', 'Hear it');
+      b.onclick = () => window.BrainBank.sayEs(q.sayPrompt);
+      qEl.appendChild(b);
+    }
+    const pic = $('bPic');
+    pic.textContent = q.pic || '';
+    if (q.swatch) { const sw = document.createElement('span'); sw.className = 'swatch'; sw.style.background = q.swatch; pic.appendChild(sw); }
+    const opts = $('bOpts');
+    opts.textContent = '';
+    q.opts.forEach((o, i) => {
+      const b = document.createElement('button');
+      b.textContent = o.label;
+      if (o.big) b.classList.add('big');
+      if (o.color) { b.style.background = o.color; b.style.minHeight = '72px'; b.setAttribute('aria-label', `Color ${i + 1}`); }
+      if (!touchMode) { const k = document.createElement('small'); k.textContent = `press ${i + 1}`; b.appendChild(k); }
+      b.onclick = () => answerBrain(i);
+      opts.appendChild(b);
+    });
+    const msg = $('bMsg');
+    msg.className = 'bmsg';
+    msg.textContent = q.challenge ? '⭐ Challenge question! Get it right for a SUPER prize!' : 'Answer right to win a prize!';
+    $('bTimer').textContent = 'Take your time 🙂';
+    brainEl.hidden = false;
+    deadEl.hidden = true;
+    if (locked) document.exitPointerLock(); // so you can click the answers
+    mouseDown = false;
+    if (q.sayPrompt) window.BrainBank.sayEs(q.sayPrompt);
+  }
+  function answerBrain(i) {
+    const q = brain.q;
+    if (brain.state !== 'ask' || !q) return;
+    brain.state = 'answered';
+    brain.all++;
+    const buttons = [...$('bOpts').querySelectorAll('button')];
+    buttons.forEach((b) => { b.disabled = true; });
+    buttons[q.answer].classList.add('right');
+    $('bTimer').textContent = '';
+    const msg = $('bMsg');
+    if (q.say) window.BrainBank.sayEs(q.say);
+    if (i === q.answer) {
+      brain.ok++; brain.streak++; brain.misses = 0;
+      sfx.pick();
+      msg.className = 'bmsg good'; msg.textContent = `✅ Yes! ${q.explain}`;
+      if (q.challenge) { brain.stars++; msg.textContent = `⭐ Amazing! ${q.explain}`; setTimeout(() => showPrizes(true), 900); }
+      else if (brain.streak % 3 === 0) setTimeout(() => showPrizes(false), 900);
+      else setTimeout(() => showReward(pick(BRAIN_BOOSTS), q.explain), 900);
+    } else {
+      buttons[i].classList.add('wrong');
+      brain.streak = 0;
+      $('bStreak').textContent = '';
+      if (!q.challenge && ++brain.misses >= 2) { brain.easy = 3; brain.misses = 0; } // a few easier ones next (challenges don't count)
+      msg.className = 'bmsg oops'; msg.textContent = `Almost! ${q.explain}`;
+      // take your time reading the answer, then jump back in (no prize, no penalty)
+      continueButton('OK, back in! ▶', () => { claimPrize(null); closeBrain(); });
+    }
+  }
+  // one big button under the card (also Enter or Space)
+  function continueButton(text, go) {
+    clearGoRows();
+    const b = document.createElement('button');
+    b.className = 'go'; b.textContent = text;
+    b.onclick = () => { if (brain.state !== 'off') go(); };
+    const row = document.createElement('div'); row.className = 'gorow'; row.appendChild(b);
+    brainEl.querySelector('.bcard').appendChild(row);
+    b.focus({ preventScroll: true });
+  }
+  function clearGoRows() { for (const row of brainEl.querySelectorAll('.gorow')) row.remove(); }
+  // the success screen: what you got and what it does
+  function showReward(k, explain) {
+    if (brain.state === 'off') return;
+    const fromChallenge = brain.state === 'prize' && brainEl.querySelector('.bcard').classList.contains('challenge');
+    brain.state = 'reward';
+    const P = POWERUPS[k];
+    $('bQ').textContent = explain ? '✅ Correct!' : fromChallenge ? '⭐ Super prize!' : '🎁 Great pick!';
+    const pic = $('bPic');
+    pic.textContent = '';
+    const icon = document.createElement('div'); icon.className = 'prize'; icon.textContent = P.icon;
+    icon.style.background = P.color;
+    pic.appendChild(icon);
+    $('bOpts').textContent = '';
+    const msg = $('bMsg');
+    msg.className = 'bmsg good'; msg.textContent = '';
+    const l1 = document.createElement('div'); l1.className = 'pname'; l1.textContent = `You got ${P.name}!`;
+    const l2 = document.createElement('div'); l2.className = 'pdesc';
+    l2.textContent = P.place ? `${P.desc}. Place it with ${touchMode ? 'its button at the bottom' : 'its number key or E'}.` : `${P.desc} until you get splatted.`;
+    msg.append(l1, l2);
+    if (explain) { const e = document.createElement('div'); e.className = 'pexp'; e.textContent = explain; msg.appendChild(e); }
+    sfx.pick();
+    continueButton("Let's go! ▶", () => { claimPrize(k); closeBrain(); });
+  }
+  // superPrize: after a challenge question, choose from the best items
+  function showPrizes(superPrize) {
+    if (brain.state !== 'answered') return;
+    brain.state = 'prize';
+    $('bQ').textContent = superPrize ? '⭐ Pick your SUPER prize!' : 'Pick your prize! 🎁';
+    $('bStreak').textContent = brain.streak ? `🔥 ${brain.streak} in a row` : '';
+    $('bPic').textContent = '';
+    const opts = $('bOpts');
+    opts.textContent = '';
+    const choices = shuffleArr(superPrize ? SUPER_PRIZES : ALL_PRIZES).slice(0, 3);
+    choices.forEach((k, i) => {
+      const P = POWERUPS[k], b = document.createElement('button');
+      b.className = 'pick'; b.dataset.k = k;
+      b.innerHTML = `<span class="pi" style="background:${P.color}">${P.icon}</span><small>${P.name}${touchMode ? '' : ` · ${i + 1}`}</small>`;
+      b.onclick = () => { if (brain.state === 'prize') showReward(k); };
+      opts.appendChild(b);
+    });
+    $('bMsg').className = 'bmsg'; $('bMsg').textContent = '';
+  }
+  const shuffleArr = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  function brainKey(i) {
+    const go = brainEl.querySelector('.go');
+    if (go) { go.click(); return; }
+    const b = $('bOpts').querySelectorAll('button')[i];
+    if (b && !b.disabled) b.click();
+  }
+  function closeBrain() {
+    clearGoRows();
+    brainEl.hidden = true;
+    const wasOpen = brain.state !== 'off';
+    brain.state = 'off'; brain.q = null;
+    if (me && !me.alive && state === 'play') deadEl.hidden = false;
+    if (wasOpen && state === 'play' && !panelOpen) lockPointer();
+  }
+  // You're back in: right away in solo and hosting, or by asking the host. One prize per splat.
+  function claimPrize(k) {
+    if (mode === 'client') sendHost({ t: 'brain', k: k || null });
+    else if (me) brainReward(me, k);
+  }
+  function brainReward(p, k) {
+    if (p.brainDeath === p.deaths) return; // one prize per splat
+    p.brainDeath = p.deaths;
+    p.asking = false;
+    if (!p.alive && !p.awayUntil) spawn(p);
+    if (!k || !POWERUPS[k]) return;
+    givePowerup(p, k);
+    fx({ t: 'pick', p: p.id, k, n: p.items.length });
+  }
+  // watches for your own splat (the same in solo, hosting or joined games)
+  function brainTick() {
+    if (!me || state === 'menu' || state === 'lobby') return;
+    if (me.alive) { brain.seen = me.deaths; if (brain.state !== 'off') closeBrain(); return; } // (back in after 2 minutes: the card goes)
+    // one card per splat
+    if (brain.state === 'off' && brain.seen !== me.deaths && learnMode !== 'off' && gameOver == null) { brain.seen = me.deaths; openBrain(); }
+  }
+  function brainScoreText() {
+    return brain.all ? `🧠 ${brain.ok}/${brain.all}` + (brain.stars ? ` · ⭐ ${brain.stars}` : '') : '';
+  }
+  // the settings on the start screen
+  function setLearnMode(v) {
+    learnMode = LEARN_MODES.includes(v) ? v : 'mix';
+    store.set('pbw3d-learn', learnMode);
+    for (const b of document.querySelectorAll('#learnSeg button')) b.classList.toggle('sel', b.dataset.v === learnMode);
+    $('ageRow').hidden = learnMode === 'off';
+  }
+  function setAge(a) {
+    brainAge = [7, 8, 9, 10].includes(a) ? a : 7;
+    brain.easy = 0;
+    store.set('pbw3d-age', brainAge);
+    for (const b of document.querySelectorAll('#ageSeg button')) b.classList.toggle('sel', +b.dataset.v === brainAge);
+  }
+  for (const b of document.querySelectorAll('#learnSeg button')) b.onclick = () => setLearnMode(b.dataset.v);
+  for (const b of document.querySelectorAll('#ageSeg button')) b.onclick = () => setAge(+b.dataset.v);
+  setLearnMode(learnMode);
+  setAge(brainAge);
+
+  // ---------- Update ready: get a newer version without losing your game ----------
+  // Every 90 seconds the page checks whether its files changed online. If they did, a button appears: it
+  // saves the game, reloads past any cached copy (?fresh=…) and puts everything back. A host's update takes
+  // friends along: they reload too and rejoin the same room as the same players. Because the matchmaking
+  // service can keep a room code reserved for up to a minute after a reload, the host comes back at a fresh
+  // address (CODE-2, CODE-3, …) that friends already know, and reclaims the plain code for new joiners later.
+  const SAVE_KEY = 'pbw3d-save', SAVE_FORMAT = 1, CHECK_EVERY = 90;
+  const FILES = ['index.html', 'game.js', 'net.js', 'brain.js'];
+  const updateBtn = $('update');
+  let pageVersion = null, updateReady = false, updating = false, roomGen = 1, basePeer = null, pendingDecals = null;
+  function hashText(t) {
+    let h = 2166136261;
+    for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36);
+  }
+  async function fetchVersion() {
+    if (!/^https?:$/.test(location.protocol)) return null;
+    const base = location.href.split(/[?#]/)[0].replace(/[^/]*$/, '');
+    const texts = await Promise.all(FILES.map((f) => fetch(base + f, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : ''))));
+    return hashText(texts.join('\u0000'));
+  }
+  async function checkForUpdate() {
+    if (updateReady) return true;
+    try {
+      const v = await fetchVersion();
+      if (!pageVersion) pageVersion = v;
+      else if (v && v !== pageVersion) { updateReady = true; refreshUpdateButton(); }
+    } catch (e) { /* offline: try again next time */ }
+    return updateReady;
+  }
+  checkForUpdate();
+  setInterval(checkForUpdate, CHECK_EVERY * 1000);
+  const inAGame = () => state === 'play' || state === 'pause';
+  function refreshUpdateButton() {
+    updateBtn.hidden = !updateReady;
+    if (!updateReady || updating) return;
+    const friend = mode === 'client' && inAGame();
+    updateBtn.disabled = friend;
+    updateBtn.textContent = friend ? '✨ Update ready · the host can update everyone'
+      : mode === 'host' ? '✨ Update ready · tap to update everyone'
+      : inAGame() ? '✨ Update ready · tap to update (your game is saved)' : '✨ Update ready · tap to update';
+  }
+  updateBtn.onclick = () => {
+    if (updating || !updateReady || (mode === 'client' && inAGame())) return;
+    updating = true;
+    updateBtn.textContent = 'Updating…';
+    if (mode === 'host') {
+      roomGen++;
+      for (const c of conns) { try { c.send({ t: 'update', gen: roomGen }); } catch (e) { /* dropped */ } }
+      setTimeout(saveAndReload, 500); // give friends a moment to hear it
+    } else saveAndReload();
+  };
+  function saveState(save) {
+    try { sessionStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+    catch (e) { try { save.decals = null; sessionStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e2) { /* can't save */ } }
+  }
+  const CHAR_FIELDS = ['id', 'name', 'color', 'ownColor', 'isBot', 'remote', 'team', 'role', 'ss', 'x', 'y', 'z', 'yaw', 'pitch', 'hp', 'maxHp',
+    'alive', 'respawn', 'shield', 'kills', 'deaths', 'streak', 'ammo', 'magSize', 'reload', 'buffs', 'items', 'sel', 'stamina', 'awayUntil', 'brainDeath'];
+  function decalData() { // paint stays where it was
+    const out = [], m = new T.Matrix4(), c = new T.Color();
+    for (let i = 0; i < decals.count; i++) {
+      decals.getMatrixAt(i, m); decals.getColorAt(i, c);
+      out.push([...m.elements.map((v) => Math.round(v * 1000) / 1000), c.getHex()]);
+    }
+    return { list: out, next: decalNext };
+  }
+  function restoreDecals(d) {
+    if (!d || !Array.isArray(d.list)) return;
+    const m = new T.Matrix4(), c = new T.Color();
+    d.list.slice(0, MAX_DECALS).forEach((a, i) => {
+      m.fromArray(a.slice(0, 16)); decals.setMatrixAt(i, m); decals.setColorAt(i, c.setHex(a[16]));
+      decalPos[i * 3] = a[12]; decalPos[i * 3 + 1] = a[13]; decalPos[i * 3 + 2] = a[14];
+    });
+    decals.count = Math.min(d.list.length, MAX_DECALS);
+    decalNext = (d.next || 0) % MAX_DECALS;
+    decals.instanceMatrix.needsUpdate = true; decals.instanceColor.needsUpdate = true;
+  }
+  function serializeGame() {
+    const base = { f: SAVE_FORMAT, at: Date.now(), mode, name: myName(), color: chosenColor, roomCode, roomGen,
+      brain: { ok: brain.ok, all: brain.all, streak: brain.streak, misses: brain.misses, easy: brain.easy, stars: brain.stars } };
+    if (mode === 'client') return { ...base, myId: me && me.id, gen: roomGen, decals: inAGame() ? decalData() : null };
+    if (state === 'lobby') return { ...base, lobby: { teams: lobby.teams, total: lobby.total } };
+    if (!me || !inAGame()) return base;
+    return { ...base, myId: me.id, now, teamMode, totalPlayers, gameOver, nextId, nextPerson, itemId,
+      bases: bases.map((b) => [b.alive, b.capTeam, b.cap]),
+      chars: chars.map((c) => Object.fromEntries(CHAR_FIELDS.map((k) => [k, c[k]]))),
+      drops: drops.map((d) => [d.id, d.type, d.x, d.y, d.z, d.ttl]),
+      deploys: deploys.map((d) => ({ id: d.id, type: d.type, owner: d.owner.id, color: d.color, x: d.x, y: d.y, z: d.z, yaw: d.yaw, w: d.w, d: d.d, ttl: d.ttl, hp: d.hp, cool: d.cool })),
+      alliances, requests, decals: decalData() };
+  }
+  function saveAndReload() {
+    saveState(serializeGame());
+    stopNet(); // let go of the room code right away so it's free again sooner
+    if (basePeer) { try { basePeer.destroy(); } catch (e) { /* gone */ } basePeer = null; }
+    reloadFresh();
+  }
+  // a one-off address skips any cached copy, so everyone lands on the newest version
+  function reloadFresh() {
+    const u = new URL(location.href);
+    u.searchParams.set('fresh', Date.now().toString(36));
+    location.replace(u.toString());
+  }
+  function restoreGame(sv) {
+    if (!sv || sv.f !== SAVE_FORMAT || Date.now() - sv.at > 120000) return false;
+    try {
+      if (sv.name) nameEl.value = sv.name;
+      if (COLORS.includes(sv.color)) { chosenColor = sv.color; colorsEl.querySelectorAll('button').forEach((b, i) => b.classList.toggle('sel', COLORS[i] === chosenColor)); }
+      if (sv.brain) Object.assign(brain, sv.brain);
+      if (sv.mode === 'client') {
+        if (!sv.roomCode) return false;
+        pendingDecals = sv.decals;
+        joinGame({ code: sv.roomCode, rejoin: sv.myId, gen: sv.gen || 1, fresh: sv.fresh || 0, updated: true, tries: 0 });
+        return true;
+      }
+      if (sv.mode === 'host' && sv.lobby) { // updated from the lobby: open it again, friends rejoin it
+        roomGen = sv.roomGen || 1;
+        hostGame(sv.roomCode, 0, { gen: roomGen, lobby: sv.lobby });
+        return true;
+      }
+      if (!Array.isArray(sv.chars)) return false;
+      resetWorld();
+      mode = sv.mode === 'host' ? 'host' : 'solo';
+      teamMode = sv.teamMode || 0; totalPlayers = sv.totalPlayers || NUM_BOTS + 1; gameOver = sv.gameOver == null ? null : sv.gameOver;
+      now = sv.now || 0; nextId = sv.nextId || nextId; nextPerson = sv.nextPerson || nextPerson; itemId = sv.itemId || 0;
+      buildBases(teamMode);
+      if (Array.isArray(sv.bases)) sv.bases.forEach(([alive, capTeam, cap], i) => { if (bases[i]) Object.assign(bases[i], { alive, capTeam, cap }); });
+      for (const o of sv.chars) {
+        const c = makeChar(o.name, o.color, o.isBot, o.id);
+        Object.assign(c, o);
+        c.buffs = o.buffs || {}; c.items = Array.isArray(o.items) ? o.items : [];
+        setColor(c, o.color);
+        if (c.isBot) bots.push(c);
+      }
+      me = byId(sv.myId);
+      if (!me) { resetWorld(); mode = 'solo'; makeBots(); return false; }
+      for (const [id, type, x, y, z, ttl] of sv.drops || []) { const d = spawnDrop(x, y, z, type); d.id = id; d.ttl = ttl; }
+      for (const o of sv.deploys || []) { const owner = byId(o.owner); if (owner && DEPLOY[o.type]) registerDeploy({ ...o, owner, flash: 0, alive: true, shield: 0, vx: 0, vz: 0, aimH: 0.75 }); }
+      alliances = sv.alliances || {}; requests = sv.requests || {};
+      restoreDecals(sv.decals);
+      if (mode === 'host') {
+        // friends are reloading too: keep their players safe and waiting for 90 seconds
+        for (const c of chars) if (c.remote) { c.awayUntil = now + 90; c.shield = Math.max(c.shield, 3); }
+        roomGen = sv.roomGen || 1;
+        lobby = { teams: teamMode, total: totalPlayers, people: [] }; // for "Back to the lobby" later
+        hostGame(sv.roomCode, 0, { gen: roomGen });
+      }
+      enterPlay();
+      brain.seen = null;
+      addNote('✨ Updated! Your game was saved.');
+      if (!touchMode && !TEST) pause(); // click to grab the mouse again
+      return true;
+    } catch (e) {
+      console.warn('Could not restore the saved game', e);
+      return false;
+    }
+  }
+  function startUp() {
+    let sv = null;
+    try { sv = JSON.parse(sessionStorage.getItem(SAVE_KEY)); sessionStorage.removeItem(SAVE_KEY); } catch (e) { /* no save */ }
+    if (sv && restoreGame(sv)) return;
+    menuEl.hidden = false;
+  }
 
   // ---------- Drawing people ----------
   function updateModels(dt) {
@@ -2901,7 +3330,11 @@
     for (const b of bots) if (b.alive) updateBot(b, dt);
     for (const c of chars) {
       if (c.alive && c.shield > 0) c.shield -= dt;
-      if (!c.alive && !c.awayUntil && (c !== me || inGame)) { c.respawn -= dt; if (c.respawn <= 0) spawn(c); }
+      if (!c.alive && !c.awayUntil && (c !== me || inGame)) {
+        const asking = c === me ? brain.state !== 'off' : c.asking; // a Brain Boost question is up: wait (2 minutes at most)
+        if (asking && (c.askT = (c.askT || 0) + dt) < 120) continue;
+        c.respawn -= dt; if (c.respawn <= 0) spawn(c);
+      }
     }
     separate();
     updateDrops(dt);
@@ -2912,10 +3345,11 @@
     updateParts(dt);
     if (mode === 'host' && state !== 'lobby') { hostStep(); sendSnapshots(dt); }
   }
-  let last = performance.now();
+  let last = performance.now(), updT = 0;
   function frame(t) {
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (t - last) / 1000);
+    if ((updT -= 1) <= 0) { updT = 30; refreshUpdateButton(); }
+    const dt = clamp((t - last) / 1000, 0, 0.05); // (the first frame's time can come out a hair negative)
     last = t;
     if (state !== 'pause' || mode !== 'solo') step(dt);
     updateModels(dt);
@@ -2930,7 +3364,7 @@
     }
   }
   makeBots();
-  menuEl.hidden = false;
+  startUp(); // the start screen, or the game you had before an update
   requestAnimationFrame(frame);
 
   // Hooks for automated tests (and curious grown-ups in the console).
@@ -2940,7 +3374,9 @@
     drops, deploys, spawnDrop, givePowerup, placeItem, fireBall, clearItems, POWERUPS, DEPLOY, MAX_CARRY,
     get decalCount() { return decals.count; },
     look(yaw, pitch) { if (me) { me.yaw = yaw; me.pitch = pitch; } },
-    setTouchMode,
+    setTouchMode, brain, BrainBank: window.BrainBank, setLearnMode, setAge,
+    get learnMode() { return learnMode; }, get brainAge() { return brainAge; },
+    update: { check: checkForUpdate, get ready() { return updateReady; }, get version() { return pageVersion; } },
     get mode() { return mode; }, get teamMode() { return teamMode; }, get bases() { return bases; }, get gameOver() { return gameOver; },
     get alliances() { return alliances; }, get requests() { return requests; }, allied, friendly, teamAction, setTeam, requestTeam, byId,
     net: {

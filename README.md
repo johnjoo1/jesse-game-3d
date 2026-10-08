@@ -127,9 +127,47 @@ teammate, usually says yes when asked, but says no if you splatted it in the las
 minutes, then the bot moves on (with the same 3-second warning). Bots stick near their teammate when there's
 nobody to fight.
 
-## Coming next
+## Brain Boost (Milestone 4)
 
-- **Milestone 4:** Brain Boost questions and "Update ready"
+On the start screen, pick **Brain Boost** (Off, Math, Spanish or Mix) and an **Age** (7, 8, 9 or 10). Both are
+saved on each device, so each kid can have their own. With it on, getting splatted shows a question card at that
+age's level, with 3 big answer buttons (or press 1, 2, 3). The questions are the same as in the top-down game.
+
+- **No rush:** the respawn waits while the question is up (in a game with friends, the host holds your respawn).
+- **Right answer:** a reward screen shows the prize you won and what it does; tap **Let's go!** (or press Enter)
+  to jump back in with it.
+- **Wrong answer:** no penalty. The card shows the right answer; tap **OK, back in!** to keep playing.
+- **⭐ Challenge questions:** about 1 in 4 questions is one grade harder, on a purple card. Get it right to pick a
+  **super prize**: Golden Gun, Sentry Turret, Triple Shot, Shield Dome or Paint Mine.
+- **3 in a row:** pick your own prize, a boost or a defense.
+- **Two misses in a row:** the next 3 questions are a grade easier.
+- A 🔊 button reads Spanish aloud, and the right word is spoken after each answer.
+- Your score shows as 🧠 right/total under the leaderboard, and on the win screen with your ⭐ challenges.
+
+| Level | Math | Spanish |
+|---|---|---|
+| 7 | Adding within 20, taking away within 20, missing numbers (5 + ? = 9), counting pictures, biggest number | Picture → word (animals, food, things), colors, numbers 0–10, hola / gracias / por favor |
+| 8 | Adding and taking away within 100, ×2 ×5 ×10, counting by 2s, 5s, 10s, halves, biggest 3-digit number | Numbers 11–20, days of the week, family, body parts, weather |
+| 9 | Times tables, division facts, adding within 1,000, rounding to the nearest ten, ? × 4 = 28 | Counting by tens (veinte, treinta…), months, school things, action words, opposites |
+| 10 | 2-digit × 1-digit, dividing 2- and 3-digit numbers, fractions of a number, adding fractions, place value | Everyday phrases (Tengo hambre), clothing, numbers 21–99 |
+| 11 (challenges at age 10) | Decimals, fractions and percentages of a number, order of operations, 2-digit × 2-digit | Short sentences, question words (¿Dónde?), yo como / tú comes |
+
+## Updates without losing your game
+
+The page checks every 90 seconds whether a newer version is online. If there is one, an **✨ Update ready**
+button appears at the top. Tapping it saves the game, reloads with the new version (skipping any copy the browser
+kept), and puts everything back: positions, scores, boosts, carried and placed defenses, drops, bases, team-ups
+and the paint on the ground.
+
+- Playing solo: tap the button whenever you like.
+- Hosting: tapping it updates everyone. Friends reload with you and rejoin the same room as the same player. The
+  host comes back at a fresh address (the room code plus -2, -3, …) that friends' games already know, because the
+  matchmaking service can keep the plain room code reserved for up to a minute after a reload. New friends can
+  still join with the plain 4-letter code.
+- Joined a friend's game: the button tells you the host can update everyone.
+
+If a friend and the host end up on different versions, joining fetches a fresh copy of the game (twice at most)
+or asks both to refresh.
 
 ## Turning on GitHub Pages
 
@@ -142,7 +180,7 @@ nobody to fight.
 ## For grown-ups: how it's built
 
 - `index.html`: screens, HUD and touch controls. `game.js`: the whole game, including multiplayer.
-  `net.js`: a stand-in for PeerJS used by the tests (see below).
+  `brain.js`: the Brain Boost questions. `net.js`: a stand-in for PeerJS used by the tests (see below).
 - Three.js r128 and PeerJS 1.5.4 from cdnjs (PeerJS falls back to unpkg). Plain JavaScript with no build step.
 - Multiplayer: the host runs the game. Each friend's game moves its own player and shows its own shots right
   away, and tells the host 30 times a second; the host decides every hit, splat, pickup and capture and sends
@@ -153,6 +191,9 @@ nobody to fight.
 - To keep it smooth on phones, it uses no real-time shadows, two lights, instanced meshes for the scenery,
   paint splats and paintballs, and recycles old paint splats after 700.
 - `tests/smoke.mjs` (controls, movement, bots, phone layout), `tests/items.mjs` (every power-up and defense rule)
-  and `tests/multi.mjs` (hosting, joining, lobby, teams, bases, team-ups, reconnecting, slow matchmaking) drive
-  the game in headless Chromium with Playwright, at laptop and phone sizes (`node tests/<name>.mjs`). Add `?test` to the page address to play without grabbing
+  `tests/multi.mjs` (hosting, joining, lobby, teams, bases, team-ups, reconnecting, slow matchmaking),
+  `tests/brain.mjs` (every Brain Boost rule, alone and with friends) and `tests/update.mjs` (updating solo, hosted
+  with slow matchmaking, and from the lobby) drive the game in headless Chromium with Playwright, at laptop and
+  phone sizes (`node tests/<name>.mjs`). The update test's server hands out a changed game.js on cue, like a new
+  version going online. Add `?test` to the page address to play without grabbing
   the mouse.

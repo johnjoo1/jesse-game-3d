@@ -224,6 +224,62 @@
   }
   #msg { padding: 24px; max-width: 420px; }
 
+  /* ---------- Brain Boost ---------- */
+  .learn { margin: 0 0 14px; text-align: left; }
+  .llab { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .llab small { display: block; font-weight: 600; color: var(--muted); font-size: 13px; }
+  .learn .seg button { font-size: 15px; padding: 7px 11px; }
+  .agerow { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 15px; }
+  #brain { position: fixed; inset: 0; z-index: 15; display: flex; align-items: center; justify-content: center; pointer-events: none;
+    padding: 12px; box-sizing: border-box; }
+  .bcard { pointer-events: auto; background: #fffdf5; color: var(--ink); border: 5px solid #ffd23d; border-radius: 22px; padding: 14px 18px 16px;
+    width: min(460px, 100%); max-height: 100%; overflow: auto; box-shadow: 0 14px 50px rgba(0, 0, 0, .45); box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+  .bcard.challenge { border-color: #b03dff; box-shadow: 0 0 0 5px rgba(176, 61, 255, .3), 0 14px 50px rgba(0, 0, 0, .45); }
+  .btop { width: 100%; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 800; color: #8a6d00; gap: 8px; }
+  .btag .star { color: #b03dff; }
+  #bStreak { color: #ff8a3d; }
+  #bTimer { color: var(--muted); font-weight: 700; }
+  .bq { font-size: 27px; font-weight: 900; line-height: 1.25; text-wrap: balance; }
+  .bq .say { border: 0; background: #ffe066; border-radius: 12px; font-size: 22px; padding: 4px 10px; margin-left: 8px; cursor: pointer; vertical-align: middle; }
+  .bpic { font-size: 46px; line-height: 1.15; letter-spacing: 4px; word-break: break-all; }
+  .bpic:empty { display: none; }
+  .bpic .swatch { display: inline-block; width: 96px; height: 62px; border-radius: 14px; border: 4px solid var(--ink); }
+  .bpic .prize { display: inline-flex; align-items: center; justify-content: center; width: 112px; height: 112px; border-radius: 50%;
+    border: 6px solid #fff; box-shadow: 0 0 0 4px var(--ink); font-size: 58px; color: var(--ink); animation: bpop .45s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes bpop { from { transform: scale(.2); } to { transform: scale(1); } }
+  .bopts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; }
+  .bopts button { flex: 1 1 110px; min-height: 66px; border: 4px solid var(--ink); border-radius: 16px; background: #fff;
+    font-size: 26px; font-weight: 900; cursor: pointer; padding: 6px 10px; color: var(--ink); }
+  .bopts button small { display: block; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .bopts button.big { font-size: 42px; }
+  .bopts button.right { background: #3dff8b; border-color: #1c8a49; }
+  .bopts button.wrong { background: #ffd0d0; border-color: #b8336a; opacity: .75; }
+  .bopts button:disabled { cursor: default; }
+  .bopts button.pick .pi { display: inline-flex; width: 52px; height: 52px; border-radius: 50%; align-items: center; justify-content: center;
+    font-size: 30px; box-shadow: 0 0 0 3px var(--ink); }
+  .bmsg { min-height: 22px; font-size: 18px; font-weight: 800; }
+  .bmsg.good { color: #1c8a49; } .bmsg.oops { color: #b8336a; }
+  .pname { font-size: 26px; font-weight: 900; color: var(--ink); }
+  .pdesc { font-size: 16px; font-weight: 600; color: #444; margin-top: 2px; }
+  .pexp { font-size: 15px; font-weight: 700; color: #2a8a52; margin-top: 6px; }
+  .gorow { width: 100%; }
+  .gorow .go { width: 100%; min-height: 60px; border: 0; border-radius: 16px; background: var(--pink); color: #fff; font-size: 24px;
+    font-weight: 900; cursor: pointer; box-shadow: 0 5px 0 #c21f5a; }
+  @media (max-height: 520px) {
+    .bcard { gap: 6px; padding: 10px 14px 12px; }
+    .bq { font-size: 21px; } .bpic { font-size: 34px; }
+    .bopts button { min-height: 52px; font-size: 22px; } .bopts button.big { font-size: 32px; }
+    .bpic .prize { width: 76px; height: 76px; font-size: 40px; }
+    .gorow .go { min-height: 48px; font-size: 20px; }
+  }
+  #board .bscore { margin-top: 4px; font-size: 14px; opacity: .9; }
+  #update { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 26; border: 0; border-radius: 999px;
+    background: #ffd23d; color: var(--ink); font-size: 16px; font-weight: 900; padding: 10px 18px; cursor: pointer;
+    box-shadow: 0 4px 0 #c99a00, 0 8px 24px rgba(0,0,0,.3); max-width: 92vw; }
+  #update:disabled { background: #fff1b8; box-shadow: 0 3px 12px rgba(0,0,0,.25); cursor: default; }
+  body.touch #update { top: 112px; font-size: 14px; }
+
   /* ---------- playing with friends ---------- */
   #mp { margin-top: 16px; }
   /* wide but short screens (a laptop, a phone held sideways): the start screen splits into two columns */
@@ -346,6 +402,7 @@
   <div class="card">
     <h1 id="goTitle"></h1>
     <p class="sub" id="goSub"></p>
+    <p class="sub" id="goBrain" hidden></p>
     <button id="goLobby" class="big">Back to the lobby</button>
     <p class="sub" id="goWait">Waiting for the host to start another round…</p>
   </div>
@@ -377,6 +434,16 @@
 <div id="netOverlay" hidden>
   <div class="pill"><span id="netText"></span> <button id="netLeave" class="tbtn alt">Leave</button></div>
 </div>
+<div id="brain" hidden>
+  <div class="bcard" role="dialog" aria-labelledby="bQ">
+    <div class="btop"><span class="btag">🧠 Brain Boost</span><span id="bStreak"></span><span id="bTimer"></span></div>
+    <div id="bQ" class="bq"></div>
+    <div id="bPic" class="bpic"></div>
+    <div id="bOpts" class="bopts"></div>
+    <div id="bMsg" class="bmsg"></div>
+  </div>
+</div>
+<button id="update" hidden></button>
 <div id="hurt"></div>
 <div id="splats"></div>
 <div id="leafy"></div>
@@ -395,6 +462,15 @@
         <button id="play" class="big">Play!</button>
       </div>
       <div class="mcol">
+        <div class="learn">
+          <div class="llab">🧠 Brain Boost <small>a question when you're splatted, for a prize</small></div>
+          <div class="seg" id="learnSeg">
+            <button data-v="off">Off</button><button data-v="math">Math</button><button data-v="spanish">Spanish</button><button data-v="mix">Mix</button>
+          </div>
+          <div class="agerow" id="ageRow"><b>Age</b>
+            <div class="seg" id="ageSeg"><button data-v="7">7</button><button data-v="8">8</button><button data-v="9">9</button><button data-v="10">10</button></div>
+          </div>
+        </div>
         <div id="mp">
           <div class="or">or play with friends</div>
           <div class="mprow">
@@ -438,8 +514,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"
         onerror="var s=document.createElement('script');s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';document.head.appendChild(s)"></script>
-<!-- ?v= changes with each version, so a browser never mixes an old game.js with a new page -->
-<script src="net.js?v=3"></script>
-<script src="game.js?v=3"></script>
+<script>
+  // The game's own files. ?v= changes with each version, so a browser never mixes an old game.js with a new
+  // page, and after "Update ready" (?fresh=…) every file skips any cached copy.
+  (function () {
+    var fresh = new URLSearchParams(location.search).get('fresh');
+    var q = '?v=4' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
+    ['brain.js', 'net.js', 'game.js'].forEach(function (src) {
+      var s = document.createElement('script');
+      s.src = src + q; s.async = false; // run in this order
+      document.body.appendChild(s);
+    });
+  })();
+</script>
 </body>
 </html>

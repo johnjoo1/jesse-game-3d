@@ -10,6 +10,7 @@ async function tab(ctx, name, query = 'fakenet') {
   const t = await open({ context: ctx, query });
   t.name = name;
   allErrors.push(t);
+  await t.page.evaluate(() => PBW.setLearnMode('off')); // Brain Boost has its own tests (brain.mjs)
   await t.page.fill('#name', name);
   return t;
 }
