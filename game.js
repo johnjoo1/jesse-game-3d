@@ -154,6 +154,12 @@
     const t = o.axis === 'x' ? (clamp(x, o.x0, o.x1) - o.x0) / (o.x1 - o.x0) : (clamp(z, o.z0, o.z1) - o.z0) / (o.z1 - o.z0);
     return o.h * (o.dir > 0 ? t : 1 - t);
   }
+  // a rock's surface height at the point of (x, z, r) nearest its middle (rocks are rounded, like they look)
+  function ellHeight(e, x, z, r) {
+    const dx = x - e.cx, dz = z - e.cz, d = Math.hypot(dx, dz), k = d > r ? (d - r) / d : 0;
+    const q = ((dx * k) / e.rx) ** 2 + ((dz * k) / e.rz) ** 2;
+    return q >= 1 ? 0 : e.ry * Math.sqrt(1 - q);
+  }
   function heightAt(x, z, r) {
     let h = 0;
     const i0 = cellOf(x - r), i1 = cellOf(x + r), j0 = cellOf(z - r), j1 = cellOf(z + r);
@@ -162,7 +168,7 @@
       for (let k = 0; k < cell.length; k++) {
         const o = cell[k];
         if (x + r <= o.x0 || x - r >= o.x1 || z + r <= o.z0 || z - r >= o.z1) continue;
-        const oh = o.ramp ? rampHeight(o, x, z) : o.h;
+        const oh = o.ramp ? rampHeight(o, x, z) : o.ell ? ellHeight(o.ell, x, z, r) : o.h;
         if (oh > h) h = oh;
       }
     }
@@ -173,9 +179,22 @@
     for (let k = 0; k < cell.length; k++) {
       const o = cell[k];
       if (x <= o.x0 || x >= o.x1 || z <= o.z0 || z >= o.z1) continue;
+      if (o.ell) { const e = o.ell; if (((x - e.cx) / e.rx) ** 2 + (y / e.ry) ** 2 + ((z - e.cz) / e.rz) ** 2 < 1) return o; continue; }
+      if (o.cyl) { const c = o.cyl; if (y >= c.y0 && y < c.y0 + c.h && Math.hypot(x - c.cx, z - c.cz) < cylR(c, y)) return o; continue; }
       if (y < (o.ramp ? rampHeight(o, x, z) : o.h) && (o.y0 == null || y >= o.y0 - 0.02)) return o;
     }
     return null;
+  }
+  const cylR = (c, y) => c.r0 + (c.r1 - c.r0) * clamp((y - c.y0) / c.h, 0, 1); // a trunk is thicker at the bottom
+  // the thing whose surface is highest right at (x, z)
+  function topAt(x, z) {
+    let best = null, bh = 0.02;
+    for (const o of grid[cellOf(z) * GN + cellOf(x)]) {
+      if (x <= o.x0 || x >= o.x1 || z <= o.z0 || z >= o.z1) continue;
+      const h = o.ramp ? rampHeight(o, x, z) : o.ell ? ellHeight(o.ell, x, z, 0) : o.cyl ? 0 : o.h;
+      if (h > bh) { bh = h; best = o; }
+    }
+    return best;
   }
   function concealed(p) {
     for (const h of hideZones) if (p.y < h.top - 0.6 && (p.x - h.x) ** 2 + (p.z - h.z) ** 2 < h.r * h.r) return true;
@@ -283,10 +302,12 @@
     while (rocks < 12 && tries++ < 600) {
       const w = R(1.4, 2.8), d = R(1.4, 2.8), h = R(0.7, 1.5), cx = R(-HALF + 5, HALF - 5), cz = R(-HALF + 5, HALF - 5);
       if (!isFree(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2, 2.5)) continue;
-      const o = addSolid({ x0: cx - w * 0.42, x1: cx + w * 0.42, z0: cz - d * 0.42, z1: cz + d * 0.42, h, kind: 'rock' });
+      const o = addSolid({ x0: cx - w / 2, x1: cx + w / 2, z0: cz - d / 2, z1: cz + d / 2, h, kind: 'rock',
+        ell: { cx, cz, rx: (w / 2) * 0.96, ry: h * 0.96, rz: (d / 2) * 0.96 } }); // rounded, the way it looks
       markers.push(o);
       const g = 0.55 + rng() * 0.2;
-      rockInst.push({ x: cx, z: cz, sx: w / 2, sy: h, sz: d / 2, ry: rng() * 6, color: new T.Color(g, g, g * 1.05) });
+      rng(); // (rocks used to turn a random way)
+      rockInst.push({ x: cx, z: cz, sx: w / 2, sy: h, sz: d / 2, ry: 0, color: new T.Color(g, g, g * 1.05) });
       take(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2); rocks++;
     }
     // Pine trees with low, thick branches you can hide in. Only the trunk is solid.
@@ -294,7 +315,7 @@
     while (trees < 16 && tries++ < 600) {
       const cx = R(-HALF + 5, HALF - 5), cz = R(-HALF + 5, HALF - 5);
       if (!isFree(cx - 2, cx + 2, cz - 2, cz + 2, 1.5)) continue;
-      addSolid({ x0: cx - 0.3, x1: cx + 0.3, z0: cz - 0.3, z1: cz + 0.3, h: 4, kind: 'trunk' });
+      addSolid({ x0: cx - 0.3, x1: cx + 0.3, z0: cz - 0.3, z1: cz + 0.3, h: 4, kind: 'trunk', cyl: { cx, cz, y0: 0, h: 4.2, r0: 0.32, r1: 0.22 } });
       trunkInst.push({ x: cx, z: cz, h: 4.2 });
       const g = new T.Color().setHSL(0.31 + rng() * 0.06, 0.55, 0.3 + rng() * 0.08);
       coneInst.push({ x: cx, y: 0.35, z: cz, r: 2.2, h: 2.7, color: g, ry: rng() * 6 });
@@ -344,7 +365,7 @@
     instanced(unitBox, new T.MeshLambertMaterial({ map: crateTex }), crateInst, (b) => {
       p.set(b.x, 0, b.z); q.identity(); s.set(b.w, b.h, b.d); c.set(0xffffff);
     });
-    const rockGeo = new T.DodecahedronGeometry(1, 0);
+    const rockGeo = new T.IcosahedronGeometry(1, 1).toNonIndexed(); rockGeo.computeVertexNormals(); // low-poly, round enough for paint to sit on
     instanced(rockGeo, new T.MeshLambertMaterial(), rockInst, (r) => {
       p.set(r.x, 0, r.z); q.setFromAxisAngle(up, r.ry); s.set(r.sx, r.sy, r.sz); c.copy(r.color);
     });
@@ -426,6 +447,31 @@
     decals.instanceColor.needsUpdate = true;
   }
   function clearDecals() { decals.count = 0; decalNext = 0; }
+  // (for the tests) splats whose rim hangs in the air: a point just behind the paint should be inside something
+  function paintCheck(firstBad) {
+    const m = new T.Matrix4(), ex = new T.Vector3(), ey = new T.Vector3(), ez = new T.Vector3(), pos = new T.Vector3();
+    let floating = 0, total = 0; const kinds = {};
+    const solidHere = (x, y, z) => y <= 0 || ((Math.abs(x) >= HALF || Math.abs(z) >= HALF) && y < 3.2) || !!solidAtPoint(x, z, y);
+    for (let i = 0; i < decals.count; i++) {
+      decals.getMatrixAt(i, m); m.extractBasis(ex, ey, ez); pos.setFromMatrixPosition(m);
+      const size = ex.length();
+      if (size < 1e-3) continue; // a hidden one
+      total++; ex.normalize(); ey.normalize(); ez.normalize();
+      let bad = false;
+      for (let k = 0; k < 12 && !bad; k++) {
+        const a = (k / 12) * Math.PI * 2, r = size * 0.4, cs = Math.cos(a) * r, sn = Math.sin(a) * r;
+        const x = pos.x + ex.x * cs + ey.x * sn - ez.x * 0.08, y = pos.y + ex.y * cs + ey.y * sn - ez.y * 0.08, z = pos.z + ex.z * cs + ey.z * sn - ez.z * 0.08;
+        if (!solidHere(x, y, z)) bad = true;
+      }
+      if (!bad) continue;
+      if (firstBad) return { x: pos.x, y: pos.y, z: pos.z };
+      floating++;
+      const o = solidAtPoint(pos.x - ez.x * 0.05, pos.z - ez.z * 0.05, pos.y - ez.y * 0.05);
+      const k = o ? o.kind : pos.y < 0.05 ? 'ground' : 'air';
+      kinds[k] = (kinds[k] || 0) + 1;
+    }
+    return firstBad ? null : { total, floating, kinds: Object.entries(kinds).map(([k, v]) => k + ' ' + v).join(', ') };
+  }
   function hideDecalsIn(o) { // paint on something that just broke goes with it
     _m4.makeScale(0, 0, 0);
     for (let i = 0; i < decals.count; i++) {
@@ -698,7 +744,8 @@
           if (b.y < 3.2) {
             const onX = Math.abs(b.x) - HALF > Math.abs(b.z) - HALF;
             const nx = onX ? -Math.sign(b.x) : 0, nz = onX ? 0 : -Math.sign(b.z);
-            splash(onX ? Math.sign(b.x) * HALF : b.x, b.y, onX ? b.z : Math.sign(b.z) * HALF, nx, 0, nz, b.color);
+            const [y, half] = span(b.y, 0, 3.2, 0.65 * DECAL_R); // (the fence is 3.2 m tall)
+            splash(onX ? Math.sign(b.x) * HALF : b.x, y, onX ? b.z : Math.sign(b.z) * HALF, nx, 0, nz, b.color, half / DECAL_R);
           }
           done = true; break;
         }
@@ -710,15 +757,13 @@
           // any paint wears a barricade down, its owner's included; turrets only take enemy paint
           if (o.dep && !b.vis && (o.dep.type === 'wall' || !friendly(o.dep.owner, b.owner))) hitDeploy(o.dep);
           if (o.blk && !b.vis) hitBlock(o.blk); // any paint wears a block down, like a barricade
-          if (o.ramp) {
+          if (o.ell) roundSplash(o.ell, b);
+          else if (o.cyl) postSplash(o.cyl, b);
+          else if (o.ramp) {
             const top = rampHeight(o, px, pz);
-            if (py >= top - 0.05) { // landed on the slope
-              const L = o.axis === 'x' ? o.x1 - o.x0 : o.z1 - o.z0, k = (o.h / L) * o.dir;
-              const len = Math.hypot(k, 1);
-              const nx = o.axis === 'x' ? -k / len : 0, nz = o.axis === 'z' ? -k / len : 0;
-              splash(b.x, rampHeight(o, b.x, b.z), b.z, nx, 1 / len, nz, b.color);
-            } else sideSplash(o, px, pz, b);
-          } else if (py >= o.h) splash(b.x, o.h, b.z, 0, 1, 0, b.color);
+            if (py >= top - 0.05) slopeSplash(o, b.x, b.z, b.color, rand(0.45, 0.8)); // landed on the slope
+            else sideSplash(o, px, pz, b);
+          } else if (py >= o.h) { const [x, z, size] = fitTop(o, b.x, b.z, rand(0.45, 0.8)); splash(x, o.h, z, 0, 1, 0, b.color, size); }
           else sideSplash(o, px, pz, b);
           done = true;
         }
@@ -734,15 +779,70 @@
     ballMesh.instanceMatrix.needsUpdate = true;
     if (ballMesh.instanceColor) ballMesh.instanceColor.needsUpdate = true;
   }
+  // Paint stays on the face it hit: a splat is moved in from the edges (and made smaller if the face is small),
+  // so none of it hangs off into the air.
+  const DECAL_R = 0.42; // how far a splat's paint reaches from its middle, for each meter of its size
+  const span = (c, a, b, half) => (b - a <= 2 * half ? [(a + b) / 2, (b - a) / 2] : [clamp(c, a + half, b - half), half]);
+  function fitTop(o, x, z, size) {
+    const [cx, hx] = span(x, o.x0, o.x1, size * DECAL_R), [cz, hz] = span(z, o.z0, o.z1, size * DECAL_R);
+    return [cx, cz, Math.min(hx, hz) / DECAL_R];
+  }
   function sideSplash(o, px, pz, b) {
     // which side of the box did it come from?
     const dx = px < o.x0 ? o.x0 - px : px > o.x1 ? px - o.x1 : 0;
     const dz = pz < o.z0 ? o.z0 - pz : pz > o.z1 ? pz - o.z1 : 0;
-    if (dx >= dz) { const nx = px < o.x0 ? -1 : 1; splash(nx < 0 ? o.x0 : o.x1, b.y, b.z, nx, 0, 0, b.color); }
-    else { const nz = pz < o.z0 ? -1 : 1; splash(b.x, b.y, nz < 0 ? o.z0 : o.z1, 0, 0, nz, b.color); }
+    const R0 = rand(0.45, 0.8) * DECAL_R, lo = o.y0 || 0;
+    if (dx >= dz) {
+      const nx = px < o.x0 ? -1 : 1, fx = nx < 0 ? o.x0 : o.x1;
+      const [z, hz] = span(b.z, o.z0, o.z1, R0);
+      // (a ramp's side is a triangle: stay under the lower end of the slope across the splat)
+      const [y, hy] = span(b.y, lo, o.ramp ? Math.min(rampHeight(o, fx, z - hz), rampHeight(o, fx, z + hz)) : o.h, R0);
+      splash(fx, y, z, nx, 0, 0, b.color, Math.min(hz, hy) / DECAL_R);
+    } else {
+      const nz = pz < o.z0 ? -1 : 1, fz = nz < 0 ? o.z0 : o.z1;
+      const [x, hx] = span(b.x, o.x0, o.x1, R0);
+      const [y, hy] = span(b.y, lo, o.ramp ? Math.min(rampHeight(o, x - hx, fz), rampHeight(o, x + hx, fz)) : o.h, R0);
+      splash(x, y, fz, 0, 0, nz, b.color, Math.min(hx, hy) / DECAL_R);
+    }
   }
-  function splash(x, y, z, nx, ny, nz, color) {
-    addDecal(x, y, z, nx, ny, nz, color, rand(0.45, 0.8));
+  function slopeNormal(o) {
+    const L = o.axis === 'x' ? o.x1 - o.x0 : o.z1 - o.z0, k = (o.h / L) * o.dir, len = Math.hypot(k, 1);
+    return [o.axis === 'x' ? -k / len : 0, 1 / len, o.axis === 'z' ? -k / len : 0];
+  }
+  function slopeSplash(o, x0, z0, color, size, quiet) {
+    const [x, z, sz] = fitTop(o, x0, z0, size), [nx, ny, nz] = slopeNormal(o);
+    if (quiet) addDecal(x, rampHeight(o, x, z), z, nx, ny, nz, color, sz);
+    else splash(x, rampHeight(o, x, z), z, nx, ny, nz, color, sz);
+  }
+  function roundSplash(e, b) { // on a rock: on its rounded surface, small enough to follow the curve
+    const dx = b.x - e.cx, dz = b.z - e.cz, q = Math.sqrt((dx / e.rx) ** 2 + (b.y / e.ry) ** 2 + (dz / e.rz) ** 2) || 1;
+    const sx = dx / q, sy = b.y / q, sz = dz / q;
+    let nx = sx / (e.rx * e.rx), ny = sy / (e.ry * e.ry), nz = sz / (e.rz * e.rz);
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    splash(e.cx + sx, sy, e.cz + sz, nx, ny, nz, b.color, Math.min(rand(0.45, 0.8), 0.7 * Math.min(e.rx, e.ry, e.rz)));
+  }
+  function postSplash(c, b) { // on a tree trunk or turret post: a small splat on its round side
+    const size = Math.min(0.36, c.h * 0.9), a = Math.atan2(b.z - c.cz, b.x - c.cx);
+    const y = clamp(b.y, c.y0 + size * 0.5, c.y0 + c.h - size * 0.5), r = cylR(c, y);
+    splash(c.cx + Math.cos(a) * r, y, c.cz + Math.sin(a) * r, Math.cos(a), 0, Math.sin(a), b.color, size);
+  }
+  // a big splat on the floor (where someone was splatted, a mine went off): fitted to whatever it lands on
+  function floorDecal(x, z, color, size) {
+    const o = topAt(x, z);
+    if (!o) { addDecal(x, 0.005, z, 0, 1, 0, color, size); return; } // the ground goes on forever
+    if (o.ramp) { slopeSplash(o, x, z, color, size, true); return; }
+    if (o.ell) {
+      const e = o.ell, y = ellHeight(e, x, z, 0);
+      let nx = (x - e.cx) / (e.rx * e.rx), ny = y / (e.ry * e.ry), nz = (z - e.cz) / (e.rz * e.rz);
+      const l = Math.hypot(nx, ny, nz) || 1;
+      addDecal(x, y, z, nx / l, ny / l, nz / l, color, Math.min(size, 0.7 * Math.min(e.rx, e.ry, e.rz)));
+      return;
+    }
+    const [cx, cz, sz] = fitTop(o, x, z, size);
+    addDecal(cx, o.h + 0.005, cz, 0, 1, 0, color, sz);
+  }
+  function splash(x, y, z, nx, ny, nz, color, size = rand(0.45, 0.8)) {
+    addDecal(x, y, z, nx, ny, nz, color, size);
     burst(x + nx * 0.05, y + ny * 0.05, z + nz * 0.05, color, 5, 2.2);
     if (me && me.alive) { const d = Math.hypot(x - me.x, z - me.z); if (d < 14) sfx.splat(0.35 * (1 - d / 14)); }
   }
@@ -984,7 +1084,8 @@
     if (type === 'wall') {
       d.solid = addSolid({ x0: d.x - d.w / 2, x1: d.x + d.w / 2, z0: d.z - d.d / 2, z1: d.z + d.d / 2, h: d.y + 2, kind: 'barricade', dep: d });
     } else if (type === 'turret') {
-      d.solid = addSolid({ x0: d.x - 0.3, x1: d.x + 0.3, z0: d.z - 0.3, z1: d.z + 0.3, h: d.y + 0.55, kind: 'turret', dep: d });
+      d.solid = addSolid({ x0: d.x - 0.3, x1: d.x + 0.3, z0: d.z - 0.3, z1: d.z + 0.3, h: d.y + 0.55, kind: 'turret', dep: d,
+        cyl: { cx: d.x, cz: d.z, y0: d.y, h: 0.55, r0: 0.36, r1: 0.26 } });
     } else if (type === 'bush') {
       d.zone = { x: d.x, z: d.z, r: cfg.r * 0.95, top: d.y + 1.75, kind: 'bush' }; hideZones.push(d.zone);
       d.leaf = { x: d.x, y: d.y + 0.75, z: d.z, r: cfg.r * 0.95 }; leafBalls.push(d.leaf);
@@ -2112,7 +2213,7 @@
       if (mode === 'client' && v.m) { v.alive = false; v.deadT = 0; v.x = e.x; v.y = e.y; v.z = e.z; }
       burst(e.x, e.y + 0.9, e.z, e.c, 46, 6);
       burst(e.x, e.y + 0.9, e.z, v.color, 16, 4);
-      addDecal(e.x, e.gy + 0.005, e.z, 0, 1, 0, e.c, 2.6);
+      floorDecal(e.x, e.z, e.c, 2.6);
       addFeed(k, v, e.how);
       if (e.k === myId && e.v !== myId) { hitMarker(true); sfx.kill(); splatPopup(v, e.st); }
       else if (me && me.alive) { const d = Math.hypot(e.x - me.x, e.z - me.z); if (d < 30) sfx.splat(0.8 * (1 - d / 30)); }
@@ -2133,8 +2234,8 @@
       if (e.p === myId) { sfx.heal(); hudKey = ''; }
     } else if (e.t === 'boom') {
       burst(e.x, e.y + 0.3, e.z, e.c, 70, 8);
-      addDecal(e.x, e.y + 0.006, e.z, 0, 1, 0, e.c, 3.6);
-      for (const [x, z] of e.s) addDecal(x, heightAt(x, z, 0) + 0.006, z, 0, 1, 0, e.c, rand(0.6, 1.1));
+      floorDecal(e.x, e.z, e.c, 3.6);
+      for (const [x, z] of e.s) floorDecal(x, z, e.c, rand(0.6, 1.1));
       if (me && state !== 'menu') { const dd = Math.hypot(e.x - me.x, e.z - me.z); if (dd < 40) sfx.boom(1 - dd / 40); }
     } else if (e.t === 'msg') {
       addNote(esc(e.s));
@@ -3567,7 +3668,7 @@
     drops, deploys, spawnDrop, givePowerup, placeItem, fireBall, clearItems, POWERUPS, DEPLOY, MAX_CARRY,
     get decalCount() { return decals.count; },
     look(yaw, pitch) { if (me) { me.yaw = yaw; me.pitch = pitch; } },
-    setTouchMode, hitsBody, blocks, placeBlock, blockTarget, useBlock, earnBlock, get blockTargetNow() { return myTarget; },
+    setTouchMode, hitsBody, paintCheck, blocks, placeBlock, blockTarget, useBlock, earnBlock, get blockTargetNow() { return myTarget; },
     brain, BrainBank: window.BrainBank, setLearnMode, setAge,
     get learnMode() { return learnMode; }, get brainAge() { return brainAge; },
     update: { check: checkForUpdate, get ready() { return updateReady; }, get version() { return pageVersion; } },

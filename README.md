@@ -22,8 +22,10 @@ mouse or keyboard hides them.
 ## The game
 
 - An outdoor arena with walls, crates, rocks, ramps, pine trees and bushes, plus 8 bots
-- **Climbing:** walk up the orange ramps onto the towers, jump onto crates and rocks, and from a crate up to the
-  lookout blocks on the east and west sides. Tall walls are too high to jump.
+- **Climbing:** walk up the orange ramps onto the towers, jump onto crates, scramble up the rounded rocks, and
+  jump from a crate up to the lookout blocks on the east and west sides. Tall walls are too high to jump.
+- **Paint stays put:** every splat sits on the face it hit (moved in from the edges, and smaller on small faces),
+  so no paint hangs off into the air. `tests/paint.mjs` checks the rim of every splat after the bots paint the arena.
 - **Hiding:** stand inside a bush or under a pine tree's low branches and bots can't see you unless they're
   right next to you (within 4 m). Your screen gets a green edge and says 🌿 Hidden. Bushes don't stop paint.
 - **Paintball gun:** paintballs fly fast and drop a little, and splat paint on whatever they hit. You have a

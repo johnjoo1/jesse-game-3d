@@ -59,8 +59,20 @@ const hostView = await ev(A, () => { const p = PBW.byId('p2'); return p && [p.te
 check(hostView === '1,#3da5ff,true', `the host sees Jesse on Blue (${hostView})`);
 
 // moving: the host sees where the friend goes
+await B.page.evaluate(() => { // face open ground, so the walk isn't stopped by a wall right in front
+  const me = PBW.me;
+  for (let k = 0; k < 16; k++) {
+    const yaw = (k / 16) * Math.PI * 2, dx = -Math.sin(yaw), dz = -Math.cos(yaw);
+    if ([1, 2, 3, 4, 5, 6].every((d) => PBW.heightAt(me.x + dx * d, me.z + dz * d, 0.6) === 0)) { me.yaw = yaw; return; }
+  }
+});
+await A.page.evaluate(() => { for (const b of PBW.bots) { b.alive = false; b.respawn = 1e9; } }); // nobody to splat Jesse mid-walk
+await B.page.waitForTimeout(300);
 const p0 = await ev(A, () => { const p = PBW.byId('p2'); return [p.x, p.z]; });
+const bp0 = await B.page.evaluate(() => [PBW.me.x, PBW.me.z, performance.now(), PBW.renderer.info.render.frame]);
 await B.page.keyboard.down('KeyW'); await B.page.waitForTimeout(2500); await B.page.keyboard.up('KeyW');
+const bp1 = await B.page.evaluate(() => [PBW.me.x, PBW.me.z, performance.now(), PBW.renderer.info.render.frame]);
+console.log('       (friend moved', Math.hypot(bp1[0] - bp0[0], bp1[1] - bp0[1]).toFixed(1), 'm on their screen;', ((bp1[3] - bp0[3]) / ((bp1[2] - bp0[2]) / 1000)).toFixed(1), 'fps)');
 await B.page.waitForTimeout(300);
 const p1 = await ev(A, () => { const p = PBW.byId('p2'); return [p.x, p.z]; });
 check(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 1, `the friend walks and the host sees it (${Math.hypot(p1[0] - p0[0], p1[1] - p0[1]).toFixed(1)} m)`);
