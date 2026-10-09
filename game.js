@@ -2483,6 +2483,10 @@
   // NET_VER: the shape of the messages between games. Bump it only when an older game couldn't play with a newer
   // one; a small fix doesn't stop friends joining (right after an update, phones can get the new files a few minutes apart)
   const NET_VER = 1;
+  // GAME_VER: shown on the start, pause and lobby screens, so you can tell which copy each device has.
+  // Goes up with every update (it matches the ?v= in index.html)
+  const GAME_VER = 9;
+  document.querySelectorAll('.ver').forEach((el) => { el.textContent = `Version ${GAME_VER}`; });
   const PEER_PREFIX = 'pbw3d-jesse-', MAX_HUMANS = 8, MAX_PLAYERS = 30, CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const NO_SERVER = "Couldn't reach the multiplayer service. Check your internet connection and try again.";
   let mode = 'solo';                  // solo | host | client
@@ -2526,7 +2530,7 @@
       if (!reopen || reopen.lobby) {
         if (!reopen) roomGen = 1;
         lobby = { teams: reopen ? reopen.lobby.teams : 0, total: reopen ? reopen.lobby.total : NUM_BOTS + 1,
-          people: [{ id: 'p1', name: myName(), color: chosenColor, team: null, host: true }] };
+          people: [{ id: 'p1', name: myName(), color: chosenColor, team: null, host: true, gv: GAME_VER }] };
         if (lobby.teams) lobby.people[0].team = 0;
         myLobbyId = 'p1';
         openLobby();
@@ -2583,17 +2587,21 @@
     conn.on('close', () => dropConn(conn, false));
     conn.on('error', () => dropConn(conn, false));
   }
+  function hostNote(t) { // something the host should know about a friend joining
+    const el = $('lNote');
+    if (state === 'lobby') { el.textContent = t; el.hidden = false; } else addNote(esc(t));
+  }
   function hostHello(conn, m) {
     if (conn.player || conn.person) return;
     if (updating) { conn.close(); return; } // about to reload: they'll retry and find the new page
-    if ((m.nv || 1) !== NET_VER) { conn.send({ t: 'oldver' }); setTimeout(() => conn.close(), 400); return; }
+    if ((m.nv || 1) !== NET_VER) { hostNote(`${cleanName(m.name)} couldn't join: they have ${m.gv ? 'version ' + m.gv : 'an older version'}, you have version ${GAME_VER}. They should reload the page.`); conn.send({ t: 'oldver', gv: GAME_VER }); setTimeout(() => conn.close(), 400); return; }
     const name = cleanName(m.name);
     if (state === 'lobby') {
       if (lobby.people.length >= MAX_HUMANS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 400); return; }
       const taken = lobby.people.map((q) => q.color);
       let color = cleanColor(m.color);
       if (taken.includes(color)) color = COLORS.find((c) => !taken.includes(c)) || color;
-      conn.person = { id: 'p' + ++nextPerson, name, color, team: lobby.teams ? smallestLobbyTeam() : null };
+      conn.person = { id: 'p' + ++nextPerson, name, color, gv: num(m.gv) || null, team: lobby.teams ? smallestLobbyTeam() : null };
       lobby.people.push(conn.person);
       lobby.total = Math.max(lobby.total, lobby.people.length);
       broadcastLobby();
@@ -2793,7 +2801,7 @@
       const chips = L.teams ? TEAM_INFO.slice(0, L.teams).map((T0, t) =>
         `<button class="chip${q.team === t ? ' sel' : ''}" data-id="${q.id}" data-team="${t}" style="--tc:${T0.color}" ${host ? '' : 'disabled'} aria-label="${T0.name}">${T0.name}</button>`).join('') : '';
       const dot = L.teams && q.team != null ? TEAM_INFO[q.team].color : q.color;
-      return `<li><span class="d" style="background:${dot}"></span><span class="nm">${esc(q.name)}${q.host ? ' 👑' : ''}${q.id === myLobbyId ? ' (you)' : ''}</span><span class="chips">${chips}</span></li>`;
+      return `<li><span class="d" style="background:${dot}"></span><span class="nm">${esc(q.name)}${q.host ? ' 👑' : ''}${q.id === myLobbyId ? ' (you)' : ''} <small class="muted">v${q.gv || '?'}</small></span><span class="chips">${chips}</span></li>`;
     }).join('');
   }
   lobbyEl.addEventListener('click', (e) => {
@@ -2892,21 +2900,24 @@
     const gen = ++netGen;
     try { if (peer) peer.destroy(); } catch (e) { /* gone */ }
     const pr = peer = new window.Peer();
+    let why = opts.why || ''; // what went wrong last, shown with the message (helps tell a bad code from a bad connection)
     const giveUp = (text) => {
       clearTimeout(timer);
       if (netGen !== gen) return;
+      text += ` [version ${GAME_VER}${why ? ', ' + why : ''}]`;
       if (tries + 1 < maxTries) {
         stopNet();
-        setTimeout(() => joinGame({ ...opts, code, tries: tries + 1 }), 2000);
+        setTimeout(() => joinGame({ ...opts, code, tries: tries + 1, why }), 2000);
       } else if (back) leaveGame(`Couldn't get back into room ${code}. The host may have left the game.`);
       else { stopNet(); if (state !== 'menu') leaveGame(text); else netMsg(text); }
     };
-    const timer = setTimeout(() => giveUp(`Couldn't join room ${code}. Check the code, and that the host still has the game open.`), 12000);
+    const timer = setTimeout(() => { if (!why || why === 'error') why = pr.open ? 'no answer from the host' : 'no matchmaking service'; giveUp(`Couldn't join room ${code}. Check the code, and that the host still has the game open.`); }, 12000);
     pr.on('open', () => {
       if (netGen !== gen) return;
+      if (why === 'no matchmaking service') why = '';
       const conn = hostConn = pr.connect(PEER_PREFIX + code + suffix, { reliable: true });
       const last = tabStore.get('pbw3d-last') || {};
-      conn.on('open', () => conn.send({ t: 'hello', v: pageVersion, nv: NET_VER, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
+      conn.on('open', () => conn.send({ t: 'hello', v: pageVersion, nv: NET_VER, gv: GAME_VER, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
       conn.on('data', (m) => {
         if (!m || typeof m !== 'object' || netGen !== gen) return;
         if (m.t === 'lobby' && Array.isArray(m.people)) {
@@ -2947,7 +2958,7 @@
             reloadFresh();
             return;
           }
-          const text = 'You and the host have different versions of the game. Both of you refresh the page, then try again.';
+          const text = `The host has ${m.gv ? 'version ' + m.gv : 'an older version'} and you have version ${GAME_VER}. Both of you reload the page, then try again.`;
           if (state === 'menu') netMsg(text); else leaveGame(text);
         }
       });
@@ -2960,9 +2971,10 @@
     });
     pr.on('error', (err) => {
       if (netGen !== gen) return;
+      why = String((err && err.type) || 'error');
       if (err.type === 'peer-unavailable' && !back && tries + 1 >= maxTries) {
         clearTimeout(timer); stopNet(); connecting = false;
-        netMsg(`No game found with code ${code}. Check the code, and that the host still has the game open.`);
+        netMsg(`No game found with code ${code}. Check the code, and that the host still has the game open. [version ${GAME_VER}]`);
         return;
       }
       if (mode === 'client' && hostConn && hostConn.open) return; // a hiccup; only a closed connection matters

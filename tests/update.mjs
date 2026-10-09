@@ -144,6 +144,8 @@ console.log('Joining with a slightly different version');
   await B.page.fill('#code', await A.page.evaluate(() => PBW.net.code));
   await B.page.click('#joinBtn');
   await A.page.waitForFunction(() => PBW.net.lobby.people.length === 2, null, T);
+  const shown = [await B.page.evaluate(() => document.querySelector('#menu .ver').textContent), await A.page.evaluate(() => document.getElementById('lPeople').textContent)];
+  check(/^Version \d+$/.test(shown[0]) && (shown[1].match(/v\d+/g) || []).length === 2, `the start screen shows the version ("${shown[0]}") and the lobby shows everyone's ("${shown[1]}")`);
   await A.page.click('#lStart');
   await B.page.waitForFunction(() => PBW.state === 'play' && PBW.me && PBW.me.alive, null, T);
   check(vs[0] !== vs[1], `host and friend have different copies of the files (${vs.join(' / ')}) and the friend still gets in`);

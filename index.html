@@ -43,6 +43,8 @@
   .touch-only { display: none; }
   body.touch .touch-only { display: block; }
   body.touch .desk-only { display: none !important; }
+  .ver { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  #lNote { color: #b8336a; font-weight: 700; }
   #rotate { margin-top: 12px; font-size: 14px; font-weight: 800; color: #b8336a; }
   @media (orientation: landscape) { #rotate { display: none !important; } }
   @media (max-height: 520px) {
@@ -431,6 +433,7 @@
   <div class="card wide">
     <h1>Room <span id="lCode" class="code"></span></h1>
     <p class="sub" id="lHint"></p>
+    <p class="sub" id="lNote" hidden></p>
     <div id="lHostOpts">
       <div class="lrow"><b>Teams</b>
         <div class="seg" id="lTeams">
@@ -513,6 +516,7 @@
           Tap a defense at the bottom to place it · 🧱 builds · DUCK to duck
         </div>
         <div id="rotate" class="touch-only">↻ Turn your device sideways for the best view</div>
+        <div class="ver"></div>
       </div>
     </div>
   </div>
@@ -525,6 +529,7 @@
     <p class="sub" id="pauseNote"></p>
     <button id="resume" class="big">Keep playing</button>
     <button id="quit" class="big alt">Back to start</button>
+    <div class="ver"></div>
   </div>
 </div>
 
@@ -538,7 +543,7 @@
   // page, and after "Update ready" (?fresh=…) every file skips any cached copy.
   (function () {
     var fresh = new URLSearchParams(location.search).get('fresh');
-    var q = '?v=8' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
+    var q = '?v=9' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
     ['brain.js', 'net.js', 'game.js'].forEach(function (src) {
       var s = document.createElement('script');
       s.src = src + q; s.async = false; // run in this order

@@ -182,6 +182,10 @@ and the paint on the ground.
   still join with the plain 4-letter code.
 - Joined a friend's game: the button tells you the host can update everyone.
 
+The start, pause and lobby screens show **Version N** (`GAME_VER` in `game.js`, the same number as `?v=` in
+`index.html`), and the lobby shows each person's version, so you can tell which copy each device has. A friend who
+can't join sees why, with their version and the reason in brackets.
+
 Friends can join even if their copy of the game is a little newer or older than the host's (right after an update,
 phones can get the new files a few minutes apart). Only a change to the messages between games (`NET_VER` in
 `game.js`) keeps them apart: then joining fetches a fresh copy of the game (twice at most) or asks both to refresh.

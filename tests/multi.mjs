@@ -158,10 +158,11 @@ await B.page.keyboard.press('KeyT');
 await wait(B.page, () => document.querySelector('#tpList [data-act="break"][data-id="p1"]'));
 await B.page.click('#tpList [data-act="break"][data-id="p1"]');
 await wait(A.page, () => { const al = Object.values(PBW.alliances)[0]; return al && al.breakT > 0; });
+const warn = await ev(A, () => Object.values(PBW.alliances)[0].breakT); // game time: background test tabs run slow, so not the clock
 const t0 = Date.now();
 await wait(A.page, () => !PBW.allied(PBW.me, PBW.byId('p2')));
 const took = (Date.now() - t0) / 1000;
-check(took > 1.8 && took < 5, `Leave team ends the team after a 3-second warning (${took.toFixed(1)} s)`);
+check(warn > 2.4 && warn <= 3 && took > 1.8 && took < 12, `Leave team ends the team after a 3-second warning (${warn.toFixed(1)} s left when it showed, ended ${took.toFixed(1)} s later)`);
 await B.page.click('#tpClose');
 
 // ----- reconnecting -----
