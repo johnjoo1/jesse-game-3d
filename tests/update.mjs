@@ -127,5 +127,28 @@ console.log('Updating from the lobby');
   await ctx.close();
 }
 
+// ----- a friend whose phone got a newer copy of the game than the host's can still join -----
+console.log('Joining with a slightly different version');
+{
+  const ctx = await newContext({ viewport: { width: 900, height: 560 } });
+  const A = await tab(ctx, 'Dad', 'fakenet');
+  await A.page.evaluate(() => { window.fakenet.reset(); PBW.setLearnMode('off'); });
+  await ready(A);
+  bump(); // new files go online after the host loaded the game
+  const B = await tab(ctx, 'Jesse', 'fakenet');
+  await B.page.evaluate(() => PBW.setLearnMode('off'));
+  await ready(B);
+  const vs = [await A.page.evaluate(() => PBW.update.version), await B.page.evaluate(() => PBW.update.version)];
+  await A.page.click('#hostBtn');
+  await A.page.waitForFunction(() => PBW.net.code, null, T);
+  await B.page.fill('#code', await A.page.evaluate(() => PBW.net.code));
+  await B.page.click('#joinBtn');
+  await A.page.waitForFunction(() => PBW.net.lobby.people.length === 2, null, T);
+  await A.page.click('#lStart');
+  await B.page.waitForFunction(() => PBW.state === 'play' && PBW.me && PBW.me.alive, null, T);
+  check(vs[0] !== vs[1], `host and friend have different copies of the files (${vs.join(' / ')}) and the friend still gets in`);
+  await ctx.close();
+}
+
 for (const t of all) check(t.errors.length === 0, `no console errors (${t.name})` + (t.errors.length ? ': ' + t.errors.slice(0, 3).join(' | ') : ''));
 await finish();

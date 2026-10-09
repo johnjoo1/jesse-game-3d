@@ -538,7 +538,7 @@
   // page, and after "Update ready" (?fresh=…) every file skips any cached copy.
   (function () {
     var fresh = new URLSearchParams(location.search).get('fresh');
-    var q = '?v=7' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
+    var q = '?v=8' + (fresh ? '&fresh=' + encodeURIComponent(fresh) : '');
     ['brain.js', 'net.js', 'game.js'].forEach(function (src) {
       var s = document.createElement('script');
       s.src = src + q; s.async = false; // run in this order

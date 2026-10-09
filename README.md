@@ -182,8 +182,9 @@ and the paint on the ground.
   still join with the plain 4-letter code.
 - Joined a friend's game: the button tells you the host can update everyone.
 
-If a friend and the host end up on different versions, joining fetches a fresh copy of the game (twice at most)
-or asks both to refresh.
+Friends can join even if their copy of the game is a little newer or older than the host's (right after an update,
+phones can get the new files a few minutes apart). Only a change to the messages between games (`NET_VER` in
+`game.js`) keeps them apart: then joining fetches a fresh copy of the game (twice at most) or asks both to refresh.
 
 ## Turning on GitHub Pages
 

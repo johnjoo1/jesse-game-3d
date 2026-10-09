@@ -2480,6 +2480,9 @@
   // ---------- Playing with friends ----------
   // Peer-to-peer with PeerJS: the host's device runs the game and friends connect straight to it. Friends
   // send where they are and what they did; the host sends everyone the game 15 times a second.
+  // NET_VER: the shape of the messages between games. Bump it only when an older game couldn't play with a newer
+  // one; a small fix doesn't stop friends joining (right after an update, phones can get the new files a few minutes apart)
+  const NET_VER = 1;
   const PEER_PREFIX = 'pbw3d-jesse-', MAX_HUMANS = 8, MAX_PLAYERS = 30, CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const NO_SERVER = "Couldn't reach the multiplayer service. Check your internet connection and try again.";
   let mode = 'solo';                  // solo | host | client
@@ -2583,7 +2586,7 @@
   function hostHello(conn, m) {
     if (conn.player || conn.person) return;
     if (updating) { conn.close(); return; } // about to reload: they'll retry and find the new page
-    if (pageVersion && m.v && m.v !== pageVersion) { conn.send({ t: 'oldver' }); setTimeout(() => conn.close(), 400); return; }
+    if ((m.nv || 1) !== NET_VER) { conn.send({ t: 'oldver' }); setTimeout(() => conn.close(), 400); return; }
     const name = cleanName(m.name);
     if (state === 'lobby') {
       if (lobby.people.length >= MAX_HUMANS) { conn.send({ t: 'full' }); setTimeout(() => conn.close(), 400); return; }
@@ -2903,7 +2906,7 @@
       if (netGen !== gen) return;
       const conn = hostConn = pr.connect(PEER_PREFIX + code + suffix, { reliable: true });
       const last = tabStore.get('pbw3d-last') || {};
-      conn.on('open', () => conn.send({ t: 'hello', v: pageVersion, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
+      conn.on('open', () => conn.send({ t: 'hello', v: pageVersion, nv: NET_VER, name: myName(), color: chosenColor, rejoin: opts.rejoin || (last.code === code ? last.id : undefined) }));
       conn.on('data', (m) => {
         if (!m || typeof m !== 'object' || netGen !== gen) return;
         if (m.t === 'lobby' && Array.isArray(m.people)) {
