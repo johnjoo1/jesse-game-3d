@@ -222,7 +222,7 @@ await B.page.keyboard.press('KeyF');
 await A.page.waitForFunction(() => PBW.blocks.length === 1 && PBW.blocks[0].owner.id === 'p2', null, T);
 await B.page.waitForFunction(() => PBW.blocks.length === 1 && PBW.me.blocks === 2, null, T);
 check(true, "a friend's block goes up on the host's game and their own (the host checks it)");
-await A.page.evaluate(() => { const b = PBW.blocks[0]; for (let k = 0; k < 4; k++) { PBW.fireBall(PBW.me, b.i + 0.5, 0.5, b.j + 2.5, 0, 0.02, -1); for (let s = 0; s < 20; s++) PBW.step(1 / 60); } });
+await A.page.evaluate(() => { const b = PBW.blocks[0]; for (let k = 0; k < 4; k++) { PBW.fireBall(PBW.me, b.i + 0.5, b.y0 + 0.5, b.j + 2.5, 0, 0.02, -1); for (let s = 0; s < 20; s++) PBW.step(1 / 60); } });
 await B.page.waitForFunction(() => PBW.blocks.length === 0, null, T);
 check(true, 'when it breaks on the host, it breaks for the friend too');
 await B.page.keyboard.down('KeyC');

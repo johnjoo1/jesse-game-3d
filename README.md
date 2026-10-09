@@ -28,6 +28,9 @@ mouse or keyboard hides them.
   so no paint hangs off into the air. `tests/paint.mjs` checks the rim of every splat after the bots paint the arena.
 - **Hiding:** stand inside a bush or under a pine tree's low branches and bots can't see you unless they're
   right next to you (within 4 m). Your screen gets a green edge and says 🌿 Hidden. Bushes don't stop paint.
+  Bots only know what they've seen: if one saw you go in, it comes looking around that spot, and if you paint
+  one from hiding it knows roughly where it came from, but it can't shoot back until it spots you. Standing on
+  top of a trunk or above the leaves isn't hidden.
 - **Paintball gun:** paintballs fly fast and drop a little, and splat paint on whatever they hit. You have a
   12-ball hopper; R reloads (1.4 s), and it reloads by itself when you run out.
 - You can take 5 hits and bots can take 3. You come back 3 seconds after being splatted, with a 3-second spawn

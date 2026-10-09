@@ -1427,7 +1427,13 @@
   // ---------- Bots ----------
   function botHurt(b, shooter) {
     if (friendly(b, shooter.owner || shooter)) return;
-    if (!b.target || !b.target.alive || b.target === shooter || Math.random() < 0.5) {
+    const hid = shooter.x != null && concealed(shooter) && Math.hypot(shooter.x - b.x, shooter.z - b.z) > HIDE_NEAR;
+    if (hid) { // paint from a tree or bush: it knows roughly where from, but can't see you to shoot back
+      if (!b.target || !b.target.alive || b.target === shooter) {
+        b.target = shooter; b.lastSeen = Math.min(b.lastSeen, now - 0.5);
+        b.seenX = shooter.x + rand(-3, 3); b.seenZ = shooter.z + rand(-3, 3);
+      }
+    } else if (!b.target || !b.target.alive || b.target === shooter || Math.random() < 0.5) {
       if (b.target !== shooter) b.react = rand(0.25, 0.5);
       b.target = shooter; b.lastSeen = now; b.seenX = shooter.x; b.seenZ = shooter.z;
     }
@@ -1468,7 +1474,10 @@
       b.target = best; b.lastSeen = now; b.seenX = best.x; b.seenZ = best.z;
       if (b.mode === 'wander') b.mode = 'fight';
     } else if (b.target && (!b.target.alive || friendly(b, b.target) || now - b.lastSeen > 3)) {
-      if (b.target.alive) { b.goal = { x: b.seenX, z: b.seenZ }; b.goalT = 8; } // go look where they were
+      if (b.target.alive) { // go look where they were (somewhere near it if they slipped into a tree or bush)
+        const a = Math.random() * Math.PI * 2, r = concealed(b.target) ? rand(3, 7) : 0;
+        b.goal = { x: clamp(b.seenX + Math.cos(a) * r, -HALF + 2, HALF - 2), z: clamp(b.seenZ + Math.sin(a) * r, -HALF + 2, HALF - 2) }; b.goalT = 8;
+      }
       b.target = null;
       if (b.mode === 'fight') b.mode = 'wander';
     }
@@ -1542,15 +1551,17 @@
     let mx = 0, mz = 0, speed = BS, faceYaw = null;
     b.crouch = false;
     const t = b.target && b.target.alive ? b.target : null;
+    const sees = t && now - b.lastSeen < 0.35;
+    const tx = t ? (sees ? t.x : b.seenX) : 0, tz = t ? (sees ? t.z : b.seenZ) : 0; // only what it's seen
     if (b.mode === 'cover' && b.cover) {
       const dx = b.cover.x - b.x, dz = b.cover.z - b.z, d = Math.hypot(dx, dz);
       if (d > 0.8) { [mx, mz] = steer(b, dx, dz); speed = BS * 1.2; }
       else { b.coverT -= dt; b.crouch = true; if (b.ammo < b.magSize) startReload(b); } // duck down behind it
       b.coverMax -= dt;
       if (b.coverT <= 0 || b.coverMax <= 0) { b.mode = t ? 'fight' : 'wander'; b.cover = null; }
-      if (t) faceYaw = Math.atan2(-(t.x - b.x), -(t.z - b.z));
+      if (t) faceYaw = Math.atan2(-(tx - b.x), -(tz - b.z));
     } else if (t) {
-      const dx = t.x - b.x, dz = t.z - b.z, d = Math.hypot(dx, dz);
+      const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
       faceYaw = Math.atan2(-dx, -dz);
       b.strafeT -= dt;
       if (b.strafeT <= 0) { b.strafe = Math.random() < 0.5 ? -1 : 1; b.strafeT = rand(0.8, 2); if (Math.random() < 0.25) b.strafe = 0; }
@@ -2485,7 +2496,7 @@
   const NET_VER = 1;
   // GAME_VER: shown on the start, pause and lobby screens, so you can tell which copy each device has.
   // Goes up with every update (it matches the ?v= in index.html)
-  const GAME_VER = 9;
+  const GAME_VER = 10;
   document.querySelectorAll('.ver').forEach((el) => { el.textContent = `Version ${GAME_VER}`; });
   const PEER_PREFIX = 'pbw3d-jesse-', MAX_HUMANS = 8, MAX_PLAYERS = 30, CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const NO_SERVER = "Couldn't reach the multiplayer service. Check your internet connection and try again.";
