@@ -3012,7 +3012,7 @@
         }
         if (!c.alive && wasAlive && deadEl.hidden) setDeadUI(true, c.lastHitBy || nobody('?'));
       } else {
-        if (ss !== c.ss) { c.ss = ss; c.x = x; c.y = y; c.z = z; c.yaw = yaw; clearSpots(c); c.m.g.scale.set(1, 1, 1); }
+        if (ss !== c.ss) { c.ss = ss; c.x = x; c.y = y; c.z = z; c.yaw = yaw; clearSpots(c); c.m.g.scale.set(1, 1, 1); c.deadT = 0; }
         c.tx = x; c.ty = y; c.tz = z; c.tyaw = yaw; c.pitch = pitch; c.vx = vx; c.vz = vz;
         if (wasAlive && !c.alive) c.deadT = Math.max(c.deadT, 0);
       }
@@ -3534,6 +3534,8 @@
         m.g.visible = c.deadT < 0.35; m.shadow.visible = false; m.tag.visible = false;
         continue;
       }
+      // back in play (a friend's screen never runs spawn(), so this is where others become visible there)
+      if (!m.g.visible || c.deadT > 0) { m.g.visible = true; m.g.scale.set(1, 1, 1); c.deadT = 0; }
       const speed = Math.hypot(c.vx, c.vz);
       c.walkT += dt * (2 + speed * 1.6);
       const bob = c.onGround ? Math.abs(Math.sin(c.walkT)) * 0.06 * Math.min(1, speed / 3) : 0;

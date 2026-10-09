@@ -58,6 +58,12 @@ check(start.team === 1 && start.base < 8, `the friend spawns at the Blue base ($
 const hostView = await ev(A, () => { const p = PBW.byId('p2'); return p && [p.team, p.color, p.remote].join(); });
 check(hostView === '1,#3da5ff,true', `the host sees Jesse on Blue (${hostView})`);
 
+// the friend can see everyone else: the host and the bots are drawn on their screen
+await B.page.waitForTimeout(400);
+const seen = await ev(B, () => { const o = PBW.chars.filter((c) => c !== PBW.me && c.alive); return [o.filter((c) => c.m.g.visible).length, o.length]; });
+check(seen[1] >= 4 && seen[0] === seen[1], `the friend sees the other players and bots (${seen[0]} of ${seen[1]} drawn)`);
+await B.page.screenshot({ path: `${SHOTS}/m3-friend-sees.png` });
+
 // moving: the host sees where the friend goes
 await B.page.evaluate(() => { // face open ground, so the walk isn't stopped by a wall right in front
   const me = PBW.me;
